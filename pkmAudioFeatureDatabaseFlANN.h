@@ -6,27 +6,24 @@
  *  Contact: parag@pkmital.com
  *
  *  Copyright 2011 Parag K. Mital. All rights reserved.
- * 
- *	Permission is hereby granted, free of charge, to any person
- *	obtaining a copy of this software and associated documentation
- *	files (the "Software"), to deal in the Software without
- *	restriction, including without limitation the rights to use,
- *	copy, modify, merge, publish, distribute, sublicense, and/or sell
- *	copies of the Software, and to permit persons to whom the
- *	Software is furnished to do so, subject to the following
- *	conditions:
- *	
- *	The above copyright notice and this permission notice shall be
- *	included in all copies or substantial portions of the Software.
- *
- *	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,	
- *	EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
- *	OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- *	NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
- *	HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- *	WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- *	FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- *	OTHER DEALINGS IN THE SOFTWARE.
+ 
+ 
+ LICENSE:
+ 
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ 
+ 
  */
 
 #pragma once
@@ -68,7 +65,7 @@ public:
 		numFeatures = feature_length;
 		numFrames = MAX_FEATURE_FRAMES;
 		
-		k				= 1;												// number of nearest neighbors
+		k				= 5;												// number of nearest neighbors
 		nnIdx			= (int *)malloc(sizeof(int)*k);						// allocate near neighbor indices
 		dists			= (float *)malloc(sizeof(float)*k);					// allocate near neighbor dists	
 		query			= (float *)malloc(sizeof(float)*feature_length);	// pre-allocate a query frame
@@ -223,61 +220,6 @@ public:
 		bBuiltIndex = true;	
 	}
 	
-	/*
-	// get called in the audio requested thread at audio rate
-	vector<pkmAudioFile> getNearestFrame(float *&frame, int bufferSize)
-	{
-		vector<pkmAudioFile> nearestAudioFrames;
-		if (bufferSize != fftN) {
-			//printf("[ERROR] Buffer size does not match database settings");
-			return nearestAudioFrames;
-		}
-		if (!bBuiltIndex) {
-			//printf("[ERROR] First build the index with buildIndex()");
-			return nearestAudioFrames;
-		}
-		
-		// get the mfcc features of the incoming frame
-		analyzer->analyzeFile(frame, bufferSize, 1, query, numFeatures);
-		
-		if (flann_find_nearest_neighbors_index_float(kdTree, 
-													 query, 
-													 1, 
-													 nnIdx, 
-													 dists, 
-													 k, 
-													 &flannParams) < 0)
-		{
-			printf("[ERROR] No frames found for Nearest Neighbor Search!\n");
-			return nearestAudioFrames;
-		}
-		
-		float sumDists = 0;
-		int i = 0;
-		while (i < k) {
-			sumDists += dists[i];
-			i++;
-		}
-		
-		for (int i = 0; i < k; i++) {
-			//printf("i-th idx: %d, dist: %f\n", nnIdx[i], dists[i]);
-			pkmAudioFile p = audio_database[nnIdx[i]];
-			if (k == 1) {
-				p.weight = 1.0;
-			}
-			else
-			{
-				p.weight =  1.0 - (dists[i] / sumDists);
-			}
-			//printf("i-th idx: %d, dist: %f, norm_dist: %f\n", nnIdx[i], dists[i], p.weight);
-			
-			//nearestAudioFrames.push_back(audio_database[nnIdx[i]]);
-			nearestAudioFrames.push_back(p);
-		}
-
-		return nearestAudioFrames;
-	}
-	*/
 	
 	// get called in the audio requested thread at audio rate
 	vector<pkmAudioFile *> getNearestFramePtrs(float *&frame, int bufferSize)

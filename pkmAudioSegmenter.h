@@ -5,26 +5,76 @@
  *
  *  Copyright 2011 Parag K. Mital. All rights reserved.
  * 
- *	Permission is hereby granted, free of charge, to any person
- *	obtaining a copy of this software and associated documentation
- *	files (the "Software"), to deal in the Software without
- *	restriction, including without limitation the rights to use,
- *	copy, modify, merge, publish, distribute, sublicense, and/or sell
- *	copies of the Software, and to permit persons to whom the
- *	Software is furnished to do so, subject to the following
- *	conditions:
- *	
- *	The above copyright notice and this permission notice shall be
- *	included in all copies or substantial portions of the Software.
- *
- *	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,	
- *	EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
- *	OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- *	NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
- *	HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- *	WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- *	FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- *	OTHER DEALINGS IN THE SOFTWARE.
+ 
+ Copyright (C) 2011 Parag K. Mital
+ 
+ The Software is and remains the property of Parag K Mital
+ ("pkmital") The Licensee will ensure that the Copyright Notice set
+ out above appears prominently wherever the Software is used.
+ 
+ The Software is distributed under this Licence: 
+ 
+ - on a non-exclusive basis, 
+ 
+ - solely for non-commercial use in the hope that it will be useful, 
+ 
+ - "AS-IS" and in order for the benefit of its educational and research
+ purposes, pkmital makes clear that no condition is made or to be
+ implied, nor is any representation or warranty given or to be
+ implied, as to (i) the quality, accuracy or reliability of the
+ Software; (ii) the suitability of the Software for any particular
+ use or for use under any specific conditions; and (iii) whether use
+ of the Software will infringe third-party rights.
+ 
+ pkmital disclaims: 
+ 
+ - all responsibility for the use which is made of the Software; and
+ 
+ - any liability for the outcomes arising from using the Software.
+ 
+ The Licensee may make public, results or data obtained from, dependent
+ on or arising out of the use of the Software provided that any such
+ publication includes a prominent statement identifying the Software as
+ the source of the results or the data, including the Copyright Notice
+ and stating that the Software has been made available for use by the
+ Licensee under licence from pkmital and the Licensee provides a copy of
+ any such publication to pkmital.
+ 
+ The Licensee agrees to indemnify pkmital and hold them
+ harmless from and against any and all claims, damages and liabilities
+ asserted by third parties (including claims for negligence) which
+ arise directly or indirectly from the use of the Software or any
+ derivative of it or the sale of any products based on the
+ Software. The Licensee undertakes to make no liability claim against
+ any employee, student, agent or appointee of pkmital, in connection 
+ with this Licence or the Software.
+ 
+ 
+ No part of the Software may be reproduced, modified, transmitted or
+ transferred in any form or by any means, electronic or mechanical,
+ without the express permission of pkmital. pkmital's permission is not
+ required if the said reproduction, modification, transmission or
+ transference is done without financial return, the conditions of this
+ Licence are imposed upon the receiver of the product, and all original
+ and amended source code is included in any transmitted product. You
+ may be held legally responsible for any copyright infringement that is
+ caused or encouraged by your failure to abide by these terms and
+ conditions.
+ 
+ You are not permitted under this Licence to use this Software
+ commercially. Use for which any financial return is received shall be
+ defined as commercial use, and includes (1) integration of all or part
+ of the source code or the Software into a product for sale or license
+ by or on behalf of Licensee to third parties or (2) use of the
+ Software or any derivative of it for research with the final aim of
+ developing software products for sale or license to a third party or
+ (3) use of the Software or any derivative of it for research with the
+ final aim of developing non-software products for sale or license to a
+ third party, or (4) use of the Software to provide any service to an
+ external organisation for which payment is received. If you are
+ interested in using the Software commercially, please contact pkmital to
+ negotiate a licence. Contact details are: parag@pkmital.com
+ 
  */
 
 #pragma once
@@ -32,16 +82,11 @@
 #include <Accelerate/Accelerate.h>
 #include "pkmAudioFeatures.h"
 #include "pkmMatrix.h"
-#include "pkmRecorder.h"
 
 const int SAMPLE_RATE = 44100;
-const int FRAME_SIZE = 512;
-const int NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS = SAMPLE_RATE*1/FRAME_SIZE;
-const int NUM_FORE_BUFFERS_FOR_FEATURE_ANALYSIS = SAMPLE_RATE*1/FRAME_SIZE;
-const int NUM_BUFFERS_FOR_SEGMENTATION_ANALYSIS = SAMPLE_RATE*3/FRAME_SIZE;
-const int MIN_SEGMENT_LENGTH = SAMPLE_RATE*.25;
+const int MIN_SEGMENT_LENGTH = 2048;
 const int MAX_SEGMENT_LENGTH = SAMPLE_RATE*5;
-const float SEGMENT_THRESHOLD = 3.25f;
+const bool bFrameSegmentation = true;
 
 class pkmAudioSegmenter
 {
@@ -49,33 +94,12 @@ public:
 	
 	// buffer size refers to the length of the buffer to average over
 	// frame size is each audio chunk
-	pkmAudioSegmenter(bool showDrawing = true)
+	pkmAudioSegmenter(int frameSize = 512);
+	~pkmAudioSegmenter();
+	
+	void setSegmentationThreshold(float thresh)
 	{
-		audioFeature				= new pkmAudioFeatures(SAMPLE_RATE, FRAME_SIZE);
-		numMFCCs					= 32;//audioFeature->getNumCoefficients();
-		audioIn						= (float *)malloc(sizeof(float) * FRAME_SIZE);
-		current_feature				= (float *)malloc(sizeof(float) * numMFCCs);
-		
-		feature_background_buffer	= pkm::Mat(NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS, numMFCCs);
-		feature_foreground_buffer	= pkm::Mat(NUM_FORE_BUFFERS_FOR_FEATURE_ANALYSIS, numMFCCs);
-		background_distance_buffer	= pkm::Mat(NUM_BUFFERS_FOR_SEGMENTATION_ANALYSIS, 1);
-		foreground_distance_buffer	= pkm::Mat(NUM_BUFFERS_FOR_SEGMENTATION_ANALYSIS, 1);
-		feature_background_average	= pkm::Mat(1, numMFCCs);
-		feature_foreground_average	= pkm::Mat(1, numMFCCs);
-		
-		bSegmenting					= false;
-		bSegmented					= false;
-		bDraw						= showDrawing;
-		
-		// recorded segment
-		audioSegment				= new pkmRecorder();
-	}
-	~pkmAudioSegmenter()
-	{
-		delete audioFeature;
-		free(audioIn);
-		free(current_feature);
-		delete audioSegment;
+		SEGMENT_THRESHOLD = MAX(0, thresh);
 	}
 	
 	inline float distanceMetric(float *buf1, float *buf2, int size)
@@ -83,185 +107,37 @@ public:
 		return pkm::Mat::sumOfAbsoluteDifferences(buf1, buf2, size);
 	}
 	
-	void resetBackgroundModel()
-	{
-		feature_background_buffer	= pkm::Mat(NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS, numMFCCs);
-	}
+	void resetBackgroundModel();
 	
 	// given a new frame of audio, did we detect a segment?
-	bool update()
-	{
-		bStartedSegment = false;
-		if (feature_background_buffer.bCircularInsertionFull) 
-		{
-			// find the average of the past N feature frames
-			feature_background_average = 
-				feature_background_buffer.sum() / (float)NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS;
-			
-			// get the distance from the current frame and the previous N frame's average 
-			// (note this can be any metric)
-			float distance = 
-				distanceMetric(feature_background_average.data, 
-							   current_feature, 
-							   feature_background_average.cols);
-			
-			// if we aren't segmenting, add the current distance to the previous M distances buffer
-			if (!bSegmenting) {
-				background_distance_buffer.insertRowCircularly(&distance);
-			}
-			
-			// calculate the mean and deviation for analysis
-			float mean_distance = pkm::Mat::mean(background_distance_buffer.data, background_distance_buffer.rows);
-			float std_distance = sqrtf(fabs(pkm::Mat::var(background_distance_buffer.data, background_distance_buffer.rows)));		
-			
-			//printf("distance: %f\nmean_distance: %f\nstd_distance: %f\n", distance, mean_distance, std_distance);
-			
-			// if it is an outlier, then we have detected an event
-			if (!bSegmenting && 
-				(fabs(distance - mean_distance) - SEGMENT_THRESHOLD*std_distance) > 0)
-			{
-				pkm::Mat current_feature_mat(1, numMFCCs, current_feature, false);
-				feature_foreground_buffer = pkm::Mat::repeat(current_feature_mat, NUM_FORE_BUFFERS_FOR_FEATURE_ANALYSIS);
-				foreground_distance_buffer.reset(NUM_FORE_BUFFERS_FOR_FEATURE_ANALYSIS, 1);
-				bSegmenting = true;
-				bStartedSegment = true;
-			}
-			// we are segmenting, check for conditions to stop segmenting if we are
-			// passed the minimum segment length
-			else if(bSegmenting && audioSegment->size > MIN_SEGMENT_LENGTH)
-			{
-				// too similar to the original background, no more event
-				if( (fabs(distance - mean_distance) - 0.3f*std_distance) < 0 )
-				{
-					bSegmenting = false;
-					bSegmented = true;
-				}
-				// too big a file, stop segmenting
-				else if(audioSegment->size >= MAX_SEGMENT_LENGTH)
-				{
-					//resetBackgroundModel();
-					bSegmenting = false;
-					bSegmented = true;
-				}
-				// 
-				else 
-				{
-					// find the average of the past N feature frames
-					feature_foreground_average = 
-						feature_foreground_buffer.sum() / (float)NUM_FORE_BUFFERS_FOR_FEATURE_ANALYSIS;
-					
-					// get the distance from the current frame and the previous N frame's average (note this can be any metric)
-					float fore_distance = distanceMetric(feature_foreground_average.data, 
-														 current_feature, 
-														 feature_foreground_average.cols);
-					
-					// if we aren't segmenting, add the current distance to the previous M distances buffer
-					foreground_distance_buffer.insertRowCircularly(&distance);
-					
-					// calculate the mean and deviation for analysis
-					float mean_fore_distance = 
-						pkm::Mat::mean(foreground_distance_buffer.data, 
-									   foreground_distance_buffer.rows);
-					float std_fore_distance = 
-						sqrtf(fabs(pkm::Mat::var(foreground_distance_buffer.data, 
-												 foreground_distance_buffer.rows)));	
-					
-					if ( foreground_distance_buffer.bCircularInsertionFull && 
-						(fabs(fore_distance - mean_fore_distance) - SEGMENT_THRESHOLD*std_fore_distance) > 0)
-					{
-						bSegmenting = false;
-						bSegmented = true;
-					}
-				}
-			}
-		}
-		else {
-			// find the average of the past N feature frames
-			feature_background_average = feature_background_buffer.sum() / (float)NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS;
-			
-			// get the distance from the current frame and the previous N frame's average (note this can be any metric)
-			float distance = pkm::Mat::sumOfAbsoluteDifferences(feature_background_average.data, current_feature, feature_background_average.cols);
-			
-			// if we aren't segmenting, add the current distance to the previous M distances buffer
-			if (!bSegmenting) {
-				background_distance_buffer.insertRowCircularly(&distance);
-			}
-		}
-		
-		return bSegmented;
-	}
-	
-	bool isSegmenting()
-	{
-		return bSegmenting;
-	}
-	
-	bool startedSegment()
-	{
-		
-	}
-	
-	void resetSegment()
-	{
-		audioSegment->reset();
-		bSegmented = false;
-	}
-	
+
+    
+    // For SEGMENTATION
+    bool update();
+	bool isSegmenting();	
+	void resetSegment();
 	// get the last recorded segment (if updateAudio() == true)
-	void getSegmentAndFeatures(float *&buf, int &buf_size, float *&features, int &feature_size)
-	{
-		if (!bSegmented) {
-			printf("[ERROR]: Should only call this function once and only if update() returns true!");
-			return;
-		}
-		buf_size = audioSegment->size;
-		//printf("segmenting %d samples\n", buf_size);
-		buf = (float *)malloc(sizeof(float) * buf_size);
-		cblas_scopy(buf_size, audioSegment->data, 1, buf, 1);
-		audioSegment->reset();
-		
-		feature_size = numMFCCs;
-		features = (float *)malloc(sizeof(float) * feature_size);
-		cblas_scopy(feature_size, feature_foreground_average.data, 1, features, 1);
-		//float rms_feature = pkm::Mat::rms(feature_foreground_average.data, feature_foreground_average.cols);
-		
-		bSegmented = false;
-	}
-	
+	void getSegmentAndFeatures(float *&buf, int &buf_size, float *&features, int &feature_size);    
+    // get the last recorded segment (if updateAudio() == true)
+	void getSegmentAndFeatures(vector<float> &buf, vector<float> &features);
 	// get the last recorded segment (if updateAudio() == true)
-	void getSegment(float *&buf, int &buf_size)
-	{
-		if (!bSegmented) {
-			printf("[ERROR]: Should only call this function once and only if update() returns true!");
-			return;
-		}
-		buf_size = audioSegment->size;
-		//printf("segmenting %d samples\n", buf_size);
-		buf = (float *)malloc(sizeof(float) * buf_size);
-		cblas_scopy(buf_size, audioSegment->data, 1, buf, 1);
-		audioSegment->reset();
-		
-		bSegmented = false;
-	}
-	
+	void getSegment(float *&buf, int &buf_size);
+
+    // For ONSET DETECTION
+    bool detectedOnset();
+    void getCurrentFeatureFrame(vector<float> &features);
+	void getBackgroundSegmentAndFeatures(vector<float> &buf, vector<float> &features);
+    void getBackgroundSegmentAndFeatures(float *&buf, int &bufSize, float *&features, int &featureSize);
+    pkm::Mat getFeatureSequence();
 	// update the circular buffer detecting segments each update()
-	void audioReceived(float *&input, int bufferSize, int nChannels)
-	{
-		audioFeature->computeMFCCF(input, current_feature, numMFCCs);
-		if (bSegmenting) {
-			feature_foreground_buffer.insertRowCircularly(current_feature);
-			audioSegment->insert(input, bufferSize);
-		}
-		else {
-			feature_background_buffer.insertRowCircularly(current_feature);
-		}
-	}
-			
-	pkmRecorder				*audioSegment;
+	void audioReceived(float *input, int bufferSize, int nChannels);
+    
+    
+    
+    pkm::Mat				audioSegment,audioBackgroundSegment;
 
 	pkmAudioFeatures		*audioFeature;
-	float					*audioIn, 
-							*current_feature;
+    pkm::Mat                current_feature;
 	
 	int						numMFCCs;
 	
@@ -272,6 +148,12 @@ public:
 	pkm::Mat				feature_deviation;
 	pkm::Mat				background_distance_buffer;
 	pkm::Mat				foreground_distance_buffer;
+    
+	float					SEGMENT_THRESHOLD;
+    
+    int                     NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS;// = SAMPLE_RATE*1/FRAME_SIZE;
+    int                     NUM_FORE_BUFFERS_FOR_FEATURE_ANALYSIS;// = SAMPLE_RATE*1/FRAME_SIZE;
+    int                     NUM_BUFFERS_FOR_SEGMENTATION_ANALYSIS;// = SAMPLE_RATE*3/FRAME_SIZE;
 	
 	bool					bSegmenting, bStartedSegment, bSegmented, bDraw;
 };
