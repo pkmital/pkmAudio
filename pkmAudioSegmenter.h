@@ -84,7 +84,7 @@
 #include "pkmMatrix.h"
 
 const int SAMPLE_RATE = 44100;
-const int MIN_SEGMENT_LENGTH = 2048;
+const int MIN_SEGMENT_LENGTH = 8192;
 const int MAX_SEGMENT_LENGTH = SAMPLE_RATE*5;
 const bool bFrameSegmentation = true;
 

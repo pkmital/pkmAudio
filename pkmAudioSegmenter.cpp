@@ -90,7 +90,7 @@ pkmAudioSegmenter::pkmAudioSegmenter(int frameSize)
     NUM_BUFFERS_FOR_SEGMENTATION_ANALYSIS = SAMPLE_RATE*3/frameSize;
     
     audioFeature				= new pkmAudioFeatures(SAMPLE_RATE, frameSize);
-    numMFCCs					= 16;//audioFeature->getNumCoefficients();
+    numMFCCs					= 64;//audioFeature->getNumCoefficients();
     current_feature             = pkm::Mat(1, numMFCCs);				//= (float *)malloc(sizeof(float) * numMFCCs);
     
     feature_background_buffer	= pkm::Mat();//pkm::Mat(NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS, numMFCCs);
