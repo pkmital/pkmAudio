@@ -84,12 +84,12 @@
  *  void setup()
  *  {
  *		af = new pkmAudioFeatures();
- *		mfccs = (float *)malloc(sizeof(float) * af->getNumCoefficients());
+ *		LFCCs = (float *)malloc(sizeof(float) * af->getNumCoefficients());
  *  }
  *
  *  void audioReceived(float *input, int bufferSize, int nChannels)
  *  {
- *		af->computeMFCC(input, mfccs);
+ *		af->computeLFCC(input, LFCCs);
  *  }
  *
  */
@@ -109,20 +109,33 @@ class pkmAudioFeatures
 public:
 	pkmAudioFeatures(int sample_rate = 44100, int fft_size = 2048);
 	~pkmAudioFeatures();
+    
+    void computeMelFeatures(float *inputSignal, float *outputFeatures, int numFilters = -1);
 	
-	void computeMFCCF(float *input, float *&output, int numMFCCS=-1);
-	void computeMFCCD(float *input, double*& output, int numMFCCS = -1);
+	void computeLFCCF(float *inputSignal, float *outputFeatures, int numLFCCS=-1);
+	void computeLFCCD(float *inputSignal, double *outputFeatures, int numLFCCS = -1);
 	
-	void computeMFCCFromMagnitudesF(float *fft_magnitudes, float *&output, int numMFCCS=-1);
-	void computeMFCCFromMagnitudesD(float *fft_magnitudes, double*& output, int numMFCCS = -1);
+	void computeLFCCFromMagnitudesF(float *fftMagnitudes, float *outputFeatures, int numLFCCS=-1);
+	void computeLFCCFromMagnitudesD(float *fftMagnitudes, double *outputFeatures, int numLFCCS = -1);
 	
+    // get pointer to calculated magnitude/phase after calculating features
 	float *getMagnitudes();
 	float *getPhases();
+    
+    inline int getMagnitudesLength()
+    {
+        return fftOutN;
+    }
+    
 	
+    // number of coefficients in total dct spectrum
 	inline int getNumCoefficients()
 	{
 		return dctN;
 	}
+    
+    // calculate a 13 + 13 + 13 dimensional audio feature vector composed of LFCC + delta LFCC + delta delta LFCC
+    void compute36DimAudioFeaturesF(float *inputSignal, float *outputFeatures);
 	
 	static float cosineDistance(float *x, float *y, unsigned int count);
 	static float L1Norm(float *buf1, float *buf2, int size);
@@ -157,6 +170,9 @@ private:
 	
 	float			*fft_magnitudes,
 					*fft_phases;
+    
+    float           *previousLFCCs;
+    float           *previousDeltaLFCCs;
 
 	float			*foutput;
 	
@@ -166,6 +182,8 @@ private:
 					fftN,
 					fftOutN,
 					sampleRate;
+    
+    int             numberOfDCTBands;                           //  for returning
     
 	
 };

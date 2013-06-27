@@ -68,7 +68,7 @@ public:
 		{
 			//double *featureFrame = (double *)malloc(sizeof(double) * mfccAnalyzer->getNumCoefficients());
 			double *featureFrame = (double *)malloc(sizeof(double) * numFeatures);
-			mfccAnalyzer->computeMFCCD(buffer + i*fftN, featureFrame, numFeatures);
+			mfccAnalyzer->computeLFCCD(buffer + i*fftN, featureFrame, numFeatures);
 			feature_matrix.push_back(featureFrame);
 			sound_lut.push_back(pkmAudioFile(buffer, i*fftN, samples));
 		}
@@ -88,7 +88,7 @@ public:
 		{
 			//double *featureFrame = (double *)malloc(sizeof(double) * mfccAnalyzer->getNumCoefficients());
 			float *featureFrame = (float *)malloc(sizeof(float) * numFeatures);
-			mfccAnalyzer->computeMFCCF(buffer + i*fftN, featureFrame, numFeatures);
+			mfccAnalyzer->computeLFCCF(buffer + i*fftN, featureFrame, numFeatures);
 			feature_matrix.push_back(featureFrame);
 			sound_lut.push_back(pkmAudioFile(buffer, i*fftN, samples));
 		}
@@ -106,7 +106,7 @@ public:
 		for (int i = 0; i < num_frames; i++) 
 		{
 			float *featureFrame = feature_matrix + i*num_features;
-			mfccAnalyzer->computeMFCCF(buffer + i*samplesPerFrame, 
+			mfccAnalyzer->computeLFCCF(buffer + i*samplesPerFrame, 
 									  featureFrame, 
 									  num_features);
 		}

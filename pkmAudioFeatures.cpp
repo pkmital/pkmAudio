@@ -65,6 +65,9 @@ pkmAudioFeatures::~pkmAudioFeatures()
 	free(fft);
 	free(fft_magnitudes);
 	free(fft_phases);
+    
+    free(previousLFCCs);
+    free(previousDeltaLFCCs);
 	
 	free(foutput);
 }
@@ -80,7 +83,7 @@ void pkmAudioFeatures::setup()
 	
 	// low C minus quater tone
 	loEdge = 55.0 * pow(2.0, 2.5/12.0);		//55.0
-	hiEdge = 8000.0;						//8000.0
+	hiEdge = 15000;						//8000.0
 	
 	// Constant-Q bandwidth
 	fratio = pow(2.0, 1.0/(float)bpoN);				
@@ -105,7 +108,15 @@ void pkmAudioFeatures::setup()
 	dctVector = (float *)malloc(sizeof(float)*dctN);	
 	
 	foutput = (float *)malloc(sizeof(float) * dctN);
+    
+    previousLFCCs = (float *)malloc(sizeof(float) * dctN);
+    memset(previousLFCCs, 0, sizeof(float) * dctN);
 	
+    previousDeltaLFCCs = (float *)malloc(sizeof(float) * dctN);
+    memset(previousDeltaLFCCs, 0, sizeof(float) * dctN);
+    
+    numberOfDCTBands = 12;
+    
 	// initialize maps
 	createLogFreqMap();
 	createDCT();
@@ -202,7 +213,30 @@ void pkmAudioFeatures::createDCT()
 	
 }
 
-void pkmAudioFeatures::computeLFCCF(float *input, float *&output, int numLFCCS)
+void pkmAudioFeatures::computeMelFeatures(float *input, float *output, int numFilters)
+{
+    // should window input buffer before FFT
+	fft->forward(0, input, fft_magnitudes, fft_phases);
+	
+	// sparse matrix product of CQT * FFT
+	int a = 0;
+	float *ptr1 = 0;
+	
+    
+    if (numFilters == -1) {
+        vDSP_mmul(fft_magnitudes, 1, CQT, 1, output, 1, 1, cqtN, fftOutN);   
+    }
+    else if (numFilters <= cqtN)
+    {
+        vDSP_mmul(fft_magnitudes, 1, CQT, 1, cqtVector, 1, 1, cqtN, fftOutN);
+        cblas_scopy(numFilters, cqtVector, 1, output, 1);
+    }
+    else {
+        cerr << "[ERROR]: pkmAudioFeatures: Incorrect number of filters" << endl;
+    }
+}
+
+void pkmAudioFeatures::computeLFCCF(float *input, float *output, int numLFCCS)
 {
 	// should window input buffer before FFT
 	fft->forward(0, input, fft_magnitudes, fft_phases);
@@ -242,7 +276,52 @@ void pkmAudioFeatures::computeLFCCF(float *input, float *&output, int numLFCCS)
 	
 }
 
-void pkmAudioFeatures::computeLFCCFromMagnitudesF(float *fft_magnitudes, float *&output, int numLFCCS)
+void pkmAudioFeatures::compute36DimAudioFeaturesF(float *inputSignal, float *outputFeatures)
+{
+	// should window input buffer before FFT
+	fft->forward(0, inputSignal, fft_magnitudes, fft_phases, true);
+	
+	// sparse matrix product of CQT * FFT
+	int a = 0;
+	float *ptr1 = 0; 
+    
+	vDSP_mmul(fft_magnitudes, 1, CQT, 1, cqtVector, 1, 1, cqtN, fftOutN);
+	
+    /*
+	// LFCC 
+	a = cqtN;
+	ptr1 = cqtVector;
+	while( a-- )
+    {
+		float f = *ptr1;
+		*ptr1++ = f == 0 ? 0 : log10f( f*f );
+	}
+    */
+    
+    vDSP_mmul(cqtVector, 1, DCT, 1, foutput, 1, 1, dctN, cqtN);
+    
+    // lfcc
+    float n = dctN;
+    vDSP_vsdiv(foutput, 1, &n, outputFeatures, 1, numberOfDCTBands);
+    
+    // lfcc'
+    vDSP_vsub(outputFeatures, 1, 
+              previousLFCCs, 1, 
+              outputFeatures + numberOfDCTBands, 1, 
+              numberOfDCTBands);
+    
+    // lfcc''
+    vDSP_vsub(outputFeatures + numberOfDCTBands, 1, 
+              previousDeltaLFCCs, 1, 
+              outputFeatures + numberOfDCTBands + numberOfDCTBands, 1, 
+              numberOfDCTBands);
+    
+    // store
+    cblas_scopy(numberOfDCTBands, outputFeatures, 1, previousLFCCs, 1);
+    cblas_scopy(numberOfDCTBands, outputFeatures + numberOfDCTBands, 1, previousDeltaLFCCs, 1);
+}
+
+void pkmAudioFeatures::computeLFCCFromMagnitudesF(float *fft_magnitudes, float *outputFeatures, int numLFCCS)
 {
 	// sparse matrix product of CQT * FFT
 	int a = 0;
@@ -260,18 +339,18 @@ void pkmAudioFeatures::computeLFCCFromMagnitudesF(float *fft_magnitudes, float *
 	}
 	
 	if (numLFCCS == -1) {
-		vDSP_mmul(cqtVector, 1, DCT, 1, output, 1, 1, dctN, cqtN);
+		vDSP_mmul(cqtVector, 1, DCT, 1, outputFeatures, 1, 1, dctN, cqtN);
 		
 		float n = dctN;
-		vDSP_vsdiv(output, 1, &n, output, 1, dctN);
+		vDSP_vsdiv(outputFeatures, 1, &n, outputFeatures, 1, dctN);
 		
 	}
 	else {
 		vDSP_mmul(cqtVector, 1, DCT, 1, foutput, 1, 1, dctN, cqtN);
-		cblas_scopy(numLFCCS, foutput, 1, output, 1);
+		cblas_scopy(numLFCCS, foutput, 1, outputFeatures, 1);
 		
 		float n = dctN;
-		vDSP_vsdiv(output, 1, &n, output, 1, numLFCCS);
+		vDSP_vsdiv(outputFeatures, 1, &n, outputFeatures, 1, numLFCCS);
 		
 	}
 	
@@ -288,7 +367,7 @@ float * pkmAudioFeatures::getPhases()
 	return fft_phases;
 }
 
-void pkmAudioFeatures::computeLFCCD(float *input, double*& output, int numLFCCS)
+void pkmAudioFeatures::computeLFCCD(float *input, double* output, int numLFCCS)
 {
 	
 	// should window input buffer before FFT
@@ -328,7 +407,7 @@ void pkmAudioFeatures::computeLFCCD(float *input, double*& output, int numLFCCS)
 	
 }
 
-void pkmAudioFeatures::computeLFCCFromMagnitudesD(float *fft_magnitudes, double*& output, int numLFCCS)
+void pkmAudioFeatures::computeLFCCFromMagnitudesD(float *fft_magnitudes, double* output, int numLFCCS)
 {
 	
 	// sparse matrix product of CQT * FFT

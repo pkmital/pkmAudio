@@ -82,29 +82,36 @@
 #include <Accelerate/Accelerate.h>
 #include "pkmAudioFeatures.h"
 #include "pkmMatrix.h"
+#include "pkmCircularRecorder.h"
 
 const int SAMPLE_RATE = 44100;
-const int MIN_SEGMENT_LENGTH = 8192;
 const int MAX_SEGMENT_LENGTH = SAMPLE_RATE*5;
 const bool bFrameSegmentation = true;
 
 class pkmAudioSegmenter
 {
 public:
-	
+	float MIN_SEGMENT_LENGTH;
 	// buffer size refers to the length of the buffer to average over
 	// frame size is each audio chunk
-	pkmAudioSegmenter(int frameSize = 512);
+	pkmAudioSegmenter(int frameSize = 512, int fftSize = 512);
 	~pkmAudioSegmenter();
 	
 	void setSegmentationThreshold(float thresh)
 	{
 		SEGMENT_THRESHOLD = MAX(0, thresh);
+        //MIN_SEGMENT_LENGTH = MAX(SAMPLE_RATE / 40, thresh * SAMPLE_RATE / 8);
 	}
+    
+    void setMinSize(float len)
+    {
+        MIN_SEGMENT_LENGTH = len;
+    }
 	
 	inline float distanceMetric(float *buf1, float *buf2, int size)
 	{
 		return pkm::Mat::sumOfAbsoluteDifferences(buf1, buf2, size);
+        //return pkmAudioFeatures::cosineDistance(buf1, buf2, size);
 	}
 	
 	void resetBackgroundModel();
@@ -114,20 +121,24 @@ public:
     
     // For SEGMENTATION
     bool update();
-	bool isSegmenting();	
+	bool isSegmenting();
+	bool isStartedSegmenting();
+    
 	void resetSegment();
 	// get the last recorded segment (if updateAudio() == true)
-	void getSegmentAndFeatures(float *&buf, int &buf_size, float *&features, int &feature_size);    
+	bool getSegmentAndFeatures(float *&buf, int &buf_size, float *&features, int &feature_size);    
     // get the last recorded segment (if updateAudio() == true)
-	void getSegmentAndFeatures(vector<float> &buf, vector<float> &features);
+	bool getSegmentAndFeatures(vector<float> &buf, vector<float> &features);
 	// get the last recorded segment (if updateAudio() == true)
-	void getSegment(float *&buf, int &buf_size);
+	bool getSegment(float *&buf, int &buf_size);
+    bool getSegment(pkm::Mat &seg);
 
     // For ONSET DETECTION
     bool detectedOnset();
     void getCurrentFeatureFrame(vector<float> &features);
 	void getBackgroundSegmentAndFeatures(vector<float> &buf, vector<float> &features);
     void getBackgroundSegmentAndFeatures(float *&buf, int &bufSize, float *&features, int &featureSize);
+    void getBackgroundSegment(float *&buf, int &segmentSize);
     pkm::Mat getFeatureSequence();
 	// update the circular buffer detecting segments each update()
 	void audioReceived(float *input, int bufferSize, int nChannels);
@@ -135,12 +146,17 @@ public:
     
     
     pkm::Mat				audioSegment,audioBackgroundSegment;
+    
+    pkmCircularRecorder     *ringBuffer;
+    float                   *alignedBuffer;
 
 	pkmAudioFeatures		*audioFeature;
     pkm::Mat                current_feature;
 	
-	int						numMFCCs;
+	int						numLFCCs, maxNumFrames;
 	
+    pkm::Mat                feature_buffer;
+    pkm::Mat                feature_average;
 	pkm::Mat				feature_background_buffer;
 	pkm::Mat				feature_background_average;
 	pkm::Mat				feature_foreground_buffer;
@@ -148,6 +164,8 @@ public:
 	pkm::Mat				feature_deviation;
 	pkm::Mat				background_distance_buffer;
 	pkm::Mat				foreground_distance_buffer;
+    
+    float                   distance, mean_distance, std_distance;
     
 	float					SEGMENT_THRESHOLD;
     
