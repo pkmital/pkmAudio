@@ -15,7 +15,7 @@
 class pkmAudioSpectralFlux
 {
 public:
-    pkmAudioSpectralFlux(int fS = 512, int fftSize = 2048);
+    pkmAudioSpectralFlux(int fS = 512, int fftSize = 2048, int sampleRate = 44100);
     ~pkmAudioSpectralFlux();
     
     float getCurrentFlux();
@@ -41,5 +41,4 @@ protected:
     int minSegmentLength;
     int numFramesSinceLastOnset;
     float threshold;
-    float smoothedFlux;
 };

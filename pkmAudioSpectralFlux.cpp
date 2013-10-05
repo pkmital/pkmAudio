@@ -11,20 +11,19 @@
 
 #include "pkmAudioSpectralFlux.h"
 
-pkmAudioSpectralFlux::pkmAudioSpectralFlux(int fS, int fftSize)
+pkmAudioSpectralFlux::pkmAudioSpectralFlux(int fS, int fftSize, int sampleRate)
 {
     bInit = false;
-    frameSize = fS;           
-    fluxHistorySize = 44100 / fS * 3.0;
+    frameSize = fS;
+    fluxHistorySize = sampleRate / fS * 1.0;
     fft = new pkmFFT(fftSize);
     magnitudes = pkm::Mat(1, fftSize / 2, true);
     phases = pkm::Mat(1, fftSize / 2, true);
     fluxHistory = pkm::Mat(fluxHistorySize, fftSize / 2, true);
     numFramesSinceLastOnset = 0;
-    minSegmentLength = 44100.0 / fS * 0.5;  // half second
+    minSegmentLength = sampleRate / fS * 0.05;
     threshold = 1;
     currentFlux = 0;
-    smoothedFlux = 0;
 }
 
 pkmAudioSpectralFlux::~pkmAudioSpectralFlux()
@@ -44,13 +43,14 @@ float pkmAudioSpectralFlux::getFlux(float *audioSignal)
     if (bInit) {
         pkm::Mat meanFlux = fluxHistory.mean();
         pkm::Mat stdFlux = fluxHistory.stddev();
+//        stdFlux.multiply(1.5);
         
         fluxHistory.insertRowCircularly(magnitudes.data);
         
         magnitudes.subtract(meanFlux);
-        magnitudes.abs();
         magnitudes.divide(stdFlux);
-        currentFlux = pkm::Mat::mean(magnitudes.data, magnitudes.rows * magnitudes.cols);
+        magnitudes.sqr();
+        currentFlux = magnitudes.sumAll()/magnitudes.size();
     }
     else {
         currentFlux = 0;
@@ -67,16 +67,16 @@ float pkmAudioSpectralFlux::getFlux(float *magnitudes, int length)
     if (bInit) {
         pkm::Mat meanFlux = fluxHistory.mean();
         pkm::Mat stdFlux = fluxHistory.stddev();
+//        stdFlux.multiply(3.0);
         
         fluxHistory.insertRowCircularly(magnitudes);
         
         pkm::Mat magnitudesMat(1, length, magnitudes, true);
         
         magnitudesMat.subtract(meanFlux);
-        magnitudesMat.abs();
         magnitudesMat.divide(stdFlux);
-        
-        currentFlux = pkm::Mat::mean(magnitudesMat.data, length);
+        magnitudesMat.sqr();
+        currentFlux = magnitudesMat.sumAll() / magnitudesMat.size();
     }
     else {
         currentFlux = 0;
@@ -112,15 +112,7 @@ bool pkmAudioSpectralFlux::detectOnset(float *magnitudes, int length)
         numFramesSinceLastOnset++;
     }
     
-    if (currentFlux > smoothedFlux)
-        smoothedFlux = 0.5 * (smoothedFlux - currentFlux) + currentFlux;
-    else
-        smoothedFlux = 0.85 * (smoothedFlux - currentFlux) + currentFlux; 
-    
-    //cout << "flux: " << currentFlux << " smoothed: " << smoothedFlux << endl;
-    if (smoothedFlux > threshold && numFramesSinceLastOnset > minSegmentLength) {
-        //cout << "segment: " <<  smoothedFlux << endl;
-        //smoothedFlux = 0;
+    if (currentFlux > threshold && numFramesSinceLastOnset > minSegmentLength) {
         numFramesSinceLastOnset = 0;
         return true;
     }
@@ -133,7 +125,6 @@ bool pkmAudioSpectralFlux::detectOnset(float *magnitudes, int length)
 void pkmAudioSpectralFlux::setOnsetThreshold(float thresh)
 {
     threshold = thresh;
-    cout << "threshold: " << threshold << endl;
 }
 
 float pkmAudioSpectralFlux::getOnsetThreshold()

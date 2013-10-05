@@ -131,7 +131,7 @@ public:
     bool bShouldAddSegment(float *data)
     {
         if(!bBuiltIndex)
-            return true;
+            return ~isnan(data[0]) && ~isinf(data[0]);
 #ifdef WITH_FLANN
         if (flann_find_nearest_neighbors_index_float(kdTree, 
 													 data, 
@@ -143,13 +143,14 @@ public:
 		{
             return true;
         }
-        else if(dists[0] > 0.0001)
+        else if(dists[0] > 0.001)
         {
+            //cout << "adding: " << dists[0] << endl;
             return true;
         }
         else 
         {
-            printf("[pkmAudioSegmentDatabase]: Too similar to database, not adding: %f\n", dists[0]);
+//            printf("[pkmAudioSegmentDatabase]: Too similar to database, not adding: %f\n", dists[0]);
             return false;
         }
 #else
@@ -168,9 +169,11 @@ public:
                 
                 while (j < featureDatabase.cols) {
                     float a = *curData++ - testData[j];
-                    sum += sqrtf(a*a);
+                    sum += abs(a);
                     j++;
                 }
+                
+                cout << "i: " << i << " dist: " << sum << endl;
                 
                 if (sum < bestSum) {
                     bestSum = sum;
@@ -178,8 +181,8 @@ public:
                 
                 i++;
             }
-            //cout << "bestSum: " << bestSum << endl;
-            return bestSum > 0.10;
+            cout << "bestSum: " << bestSum << endl;
+            return ~isinf(bestSum) && ~isnan(bestSum) && bestSum > 0.010;
         }
         else {
             return true;
@@ -202,13 +205,13 @@ public:
 		{
             return true;
         }
-        else if(dists[0] > 0.0001)
+        else if(dists[0] > 0.001)
         {
             return true;
         }
         else 
         {
-            printf("[pkmAudioSegmentDatabase]: Too similar to database, not adding: %f\n", dists[0]);
+//            printf("[pkmAudioSegmentDatabase]: Too similar to database, not adding: %f\n", dists[0]);
             return false;
         }
 #else
@@ -233,7 +236,7 @@ public:
                 i++;
             }
             //cout << "dist: " << minDist << endl;
-            return minDist > 0.01;
+            return ~isinf(minDist) && ~isnan(minDist) && minDist > 0.010;
         }
         else {
             return true;
@@ -328,13 +331,17 @@ public:
             int j = 0;
             while (j < featureDatabase.cols) {
                 float a = *curData++ - testData[j];
-                sum += (a*a);
+                sum += abs(a);
                 j++;
             }
+            
+            cout << "i: " << i << " dist: " << sum << endl;
+            
             if (sum < bestSum) {
                 bestSum = sum;
                 bestIdx = i;
             }
+            
             i++;
         }
         
@@ -405,10 +412,12 @@ public:
             int j = 0;
             while (j < featureDatabase.cols) {
                 float a = *curData++ - testData[j];
-                sum += (a*a);
+                sum += abs(a);
                 j++;
             }
-            //cout << "i: " << i << " " << sum << endl;
+            
+            cout << "i: " << i << " " << sum << endl;
+            
             if (sum < bestSum) {
                 bestSum = sum;
                 bestIdx = i;
@@ -455,7 +464,7 @@ public:
         }
 #ifdef WITH_FLANN
         if (flann_find_nearest_neighbors_index_float(kdTree, 
-                                                     descriptor, 
+                                                     featureSequence.data, 
                                                      1, 
                                                      nnIdx, 
                                                      dists, 

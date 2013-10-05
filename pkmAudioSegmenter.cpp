@@ -149,7 +149,7 @@ bool pkmAudioSegmenter::detectedOnset()
         
         // get the distance from the current frame and the previous N frame's average 
         // (note this can be any metric)
-        float distance = 
+        distance = 
         distanceMetric(feature_background_average.data, 
                        &current_feature[0], 
                        feature_background_average.cols);
@@ -158,8 +158,8 @@ bool pkmAudioSegmenter::detectedOnset()
         background_distance_buffer.insertRowCircularly(&distance);
         
         // calculate the mean and deviation for analysis
-        float mean_distance = pkm::Mat::mean(background_distance_buffer.data, background_distance_buffer.rows);
-        float std_distance = sqrtf(fabs(pkm::Mat::var(background_distance_buffer.data, background_distance_buffer.rows)));		
+        mean_distance = pkm::Mat::mean(background_distance_buffer.data, background_distance_buffer.rows);
+        std_distance = sqrtf(fabs(pkm::Mat::var(background_distance_buffer.data, background_distance_buffer.rows)));
         
         //printf("distance: %f, mean_distance: %f, std_distance: %f\n", distance, mean_distance, std_distance);
         // if it is an outlier, then we have detected an event

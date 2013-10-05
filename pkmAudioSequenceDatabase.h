@@ -8,7 +8,12 @@
 
 #pragma once
 
+#ifdef USE_GVF
+#include "pkmGVF.h"
+#else
 #include "pkmDTW.h"
+#endif
+
 #include "pkmAudioSegment.h"
 #include "pkmEXTAudioFileReader.h"
 #include "ofUtils.h"
@@ -54,6 +59,7 @@ public:
         
         if (pathi.size() > 0 && pathj.size() > 0) {
             audioSequences[location]->audio_rate = pathi[0] / (double) pathj[0];
+            audioSequences[location]->frame = pathi[pathi.size()-1];
         }
         else {
             audioSequences[location]->audio_rate = 1.0;
@@ -64,17 +70,29 @@ public:
     vector<ofPtr<pkmAudioSegment> > getNearestSequences(Mat &audioFeature)
     {
         vector<ofPtr<pkmAudioSegment> > nearestSequences;
+        
+        nearestSequences.push_back(getNearestSequence(audioFeature));
+        
+        return nearestSequences;
+    }
+    
+    
+    vector<ofPtr<pkmAudioSegment> > getNearestSequences(float *audioFeature, int numFeatures)
+    {
+        vector<ofPtr<pkmAudioSegment> > nearestSequences;
         int location;
         vector<int> pathi, pathj;
         float distance;
-        database.getNearestCandidate(audioFeature, distance, location, pathi, pathj);
+        database.getNearestCandidate(audioFeature, numFeatures, distance, location, pathi, pathj);
         
         if (pathi.size() > 0 && pathj.size() > 0) {
             audioSequences[location]->audio_rate = pathi[0] / (double) pathj[0];
+            audioSequences[location]->frame = pathi[pathi.size()-1];
         }
         else {
             audioSequences[location]->audio_rate = 1.0;
         }
+        
         
         //audioSequences[location]->audio_rate = pathi.back() / (double)pathj.back();
         //if (pathi.size() > 0 || pathk.size() > 0) {
@@ -107,6 +125,9 @@ public:
     void load(bool bLoadBuffer = false)
     {
         database.load();
+#ifdef USE_GVF
+        database.buildDatabase();
+#endif
         
         FILE *fp;
         fp = fopen(ofToDataPath("audio_database.txt").c_str(), "r");
@@ -141,7 +162,12 @@ public:
         printf("done.\n");
     }
     
+    
 private:
     vector<ofPtr<pkmAudioSegment> >     audioSequences;
+#ifdef USE_GVF
+    pkmGVF                              database;
+#else
     pkmDTW                              database;
+#endif
 };
