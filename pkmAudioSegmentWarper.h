@@ -61,7 +61,6 @@ public:
         }
         vDSP_vmul(warpedAudio.data, 1, pkmAudioWindow::rampInBuffer, 1, warpedAudio.data, 1, pkmAudioWindow::rampInLength);
         vDSP_vmul(warpedAudio.data + targetLength - pkmAudioWindow::rampOutLength, 1, pkmAudioWindow::rampOutBuffer, 1, warpedAudio.data + targetLength - pkmAudioWindow::rampOutLength, 1, pkmAudioWindow::rampOutLength);
-        //cout << "len: " << targetLength << " sp: " << fixedSpeed << endl;
     }
     
         
@@ -77,19 +76,95 @@ public:
         
         if (sourceLength > 0)
         {
-            pkm::Mat speeds(1, targetFrames*frameSize, true);
-            pkm::Mat sourcePathMat(1, sourcePath.size()), targetPathMat(1, targetPath.size());
+            int prevIdxSource = sourcePath.back();
+            int prevIdxTarget = targetPath.back();
+            warpConditions previousState = warpUnknown;
+            pkm::Mat warpCurve;
+            int previousStateLength = 1;
             
-            for(int i = 0; i < targetPath.size(); i++)
-            {
-                sourcePathMat[sourcePath.size() - 1 - i] = sourcePath[i] + 1;
-                targetPathMat[targetPath.size() - 1 - i] = targetPath[i] + 1;
+            // get speed for every frame
+            for (int i = sourceLength - 2; i >= 0; i--) {
+                if (sourcePath[i] == prevIdxSource &&               // reduce source speed
+                    targetPath[i] != prevIdxTarget)
+                {
+                    if (previousState == warpReduce) {              // same state
+                        previousStateLength++;
+                    }
+                    else if(previousState == warpUnknown) {
+                        previousStateLength++;
+                        previousState = warpReduce;
+                    }
+                    else {                                          // state changed
+                        float speed = getSpeedForState(previousState, previousStateLength);
+                        for (int j = 0; j < previousStateLength; j++) {
+                            warpCurve.push_back(speed);
+                        }
+                        previousStateLength = 1;
+                        previousState = warpReduce;
+                    }
+                }
+                else if(sourcePath[i] != prevIdxSource &&           // increase source speed
+                        targetPath[i] == prevIdxTarget)
+                {
+                    if (previousState == warpIncrease) {            // same state
+                        previousStateLength++;
+                    }
+                    else if(previousState == warpUnknown) {
+                        previousStateLength++;
+                        previousState = warpIncrease;
+                    }
+                    else {                                          // state changed
+                        float speed = getSpeedForState(previousState, previousStateLength);
+                        //for (int j = 0; j < previousStateLength; j++) {
+                        warpCurve.push_back(speed);
+                        //}
+                        previousStateLength = 1;
+                        previousState = warpIncrease;
+                    }
+                }
+                else if(sourcePath[i] != prevIdxSource &&           // constant source speed
+                        targetPath[i] != prevIdxTarget)
+                {
+                    if (previousState == warpConstant) {            // same state
+                        previousStateLength++;
+                    }
+                    else if(previousState == warpUnknown) {
+                        previousStateLength++;
+                        previousState = warpConstant;
+                    }
+                    else {                                          // state changed
+                        float speed = getSpeedForState(previousState, previousStateLength);
+                        for (int j = 0; j < previousStateLength; j++) {
+                            warpCurve.push_back(speed);
+                        }
+                        previousStateLength = 1;
+                        previousState = warpConstant;
+                    }
+                }
+                else {
+                    cout << "Uh..." << endl;
+                }
             }
+            float speed = getSpeedForState(previousState, previousStateLength);
+            for (int j = 0; j < previousStateLength; j++) {
+                warpCurve.push_back(speed);
+            }
+            pkm::Mat speeds = pkm::Mat::resize(warpCurve, targetFrames*frameSize);
             
-            pkm::Mat sourcePathRsz = pkm::Mat::resize(sourcePathMat, targetFrames*frameSize);
-            pkm::Mat targetPathRsz = pkm::Mat::resize(targetPathMat, targetFrames*frameSize);
-            sourcePathRsz.divide(targetPathRsz, speeds);
-            //targetPathRsz.divide(sourcePathRsz, speeds);
+            
+//            pkm::Mat speeds(1, targetFrames*frameSize, true);
+//            pkm::Mat sourcePathMat(1, sourcePath.size()), targetPathMat(1, targetPath.size());
+//            
+//            for(int i = 0; i < targetPath.size(); i++)
+//            {
+//                sourcePathMat[sourcePath.size() - 1 - i] = sourcePath[i] + 1;
+//                targetPathMat[targetPath.size() - 1 - i] = targetPath[i] + 1;
+//            }
+//            
+//            pkm::Mat sourcePathRsz = pkm::Mat::resize(sourcePathMat, targetFrames*frameSize);
+//            pkm::Mat targetPathRsz = pkm::Mat::resize(targetPathMat, targetFrames*frameSize);
+//            sourcePathRsz.divide(targetPathRsz, speeds);
+//            //targetPathRsz.divide(sourcePathRsz, speeds);
         
 #ifdef USE_DIRAC
             maxiSample s;
