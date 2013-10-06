@@ -37,7 +37,7 @@ protected:
     pkm::Mat magnitudes, phases, fluxHistory;
     int frameSize;
     int fluxHistorySize;
-    bool bInit;
+    bool bInit, bSegmenting;
     int minSegmentLength;
     int numFramesSinceLastOnset;
     float threshold;

@@ -13,7 +13,7 @@
 
 pkmAudioSpectralFlux::pkmAudioSpectralFlux(int fS, int fftSize, int sampleRate)
 {
-    bInit = false;
+    bInit = bSegmenting = false;
     frameSize = fS;
     fluxHistorySize = sampleRate / fS * 1.0;
     fft = new pkmFFT(fftSize);
@@ -40,24 +40,7 @@ float pkmAudioSpectralFlux::getFlux(float *audioSignal)
 {   
     fft->forward(0, audioSignal, magnitudes.data, phases.data);
     
-    if (bInit) {
-        pkm::Mat meanFlux = fluxHistory.mean();
-        pkm::Mat stdFlux = fluxHistory.stddev();
-//        stdFlux.multiply(1.5);
-        
-        fluxHistory.insertRowCircularly(magnitudes.data);
-        
-        magnitudes.subtract(meanFlux);
-        magnitudes.divide(stdFlux);
-        magnitudes.sqr();
-        currentFlux = magnitudes.sumAll()/magnitudes.size();
-    }
-    else {
-        currentFlux = 0;
-        bInit = true;
-    }
-    
-    return currentFlux;
+    return getFlux(magnitudes.data, magnitudes.size());
 }
 
 
@@ -67,7 +50,6 @@ float pkmAudioSpectralFlux::getFlux(float *magnitudes, int length)
     if (bInit) {
         pkm::Mat meanFlux = fluxHistory.mean();
         pkm::Mat stdFlux = fluxHistory.stddev();
-//        stdFlux.multiply(3.0);
         
         fluxHistory.insertRowCircularly(magnitudes);
         
@@ -88,15 +70,9 @@ float pkmAudioSpectralFlux::getFlux(float *magnitudes, int length)
 
 bool pkmAudioSpectralFlux::detectOnset(float *audioSignal)
 {
-    currentFlux = getFlux(audioSignal);
-    if (currentFlux > threshold && numFramesSinceLastOnset > minSegmentLength) {
-        numFramesSinceLastOnset = 0;
-        return true;
-    }
-    else {
-        numFramesSinceLastOnset++;
-        return false;
-    }
+    fft->forward(0, audioSignal, magnitudes.data, phases.data);
+    
+    return detectOnset(magnitudes.data, magnitudes.size());
 }
 
 
@@ -112,8 +88,14 @@ bool pkmAudioSpectralFlux::detectOnset(float *magnitudes, int length)
         numFramesSinceLastOnset++;
     }
     
-    if (currentFlux > threshold && numFramesSinceLastOnset > minSegmentLength) {
+    if (!bSegmenting && currentFlux > threshold && numFramesSinceLastOnset > minSegmentLength) {
         numFramesSinceLastOnset = 0;
+        bSegmenting = true;
+        return true;
+    }
+    if (bSegmenting && currentFlux < threshold && numFramesSinceLastOnset > minSegmentLength) {
+        numFramesSinceLastOnset = 0;
+        bSegmenting = false;
         return true;
     }
     else {
