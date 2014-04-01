@@ -15,7 +15,7 @@ pkmAudioSpectralFlux::pkmAudioSpectralFlux(int fS, int fftSize, int sampleRate)
 {
     bInit = bSegmenting = false;
     frameSize = fS;
-    fluxHistorySize = sampleRate / fS * 1.0;
+    fluxHistorySize = sampleRate / fS * 3.0;
     fft = new pkmFFT(fftSize);
     magnitudes = pkm::Mat(1, fftSize / 2, true);
     phases = pkm::Mat(1, fftSize / 2, true);
@@ -79,6 +79,8 @@ bool pkmAudioSpectralFlux::detectOnset(float *audioSignal)
 bool pkmAudioSpectralFlux::detectOnset(float *magnitudes, int length)
 {
     currentFlux = getFlux(magnitudes, length);
+    
+//    cout << "flux: " << currentFlux << endl;
     
     if (isnan(currentFlux) | isinf(currentFlux)) {
         numFramesSinceLastOnset = 0;

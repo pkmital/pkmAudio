@@ -46,8 +46,8 @@ public:
 	{
 		int ratio = 1;
 		frameSize = fS;
-		rampInLength = frameSize;
-		rampOutLength = frameSize;
+		rampInLength = frameSize / 10;
+		rampOutLength = frameSize / 10;
 		window = (float *)malloc(sizeof(float) * frameSize / (ratio/2.0f));
 		rampInBuffer = (float *)malloc(sizeof(float) * rampInLength);
 		rampOutBuffer = (float *)malloc(sizeof(float) * rampOutLength);

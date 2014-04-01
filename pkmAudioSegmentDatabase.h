@@ -173,7 +173,7 @@ public:
                     j++;
                 }
                 
-                cout << "i: " << i << " dist: " << sum << endl;
+//                cout << "i: " << i << " dist: " << sum << endl;
                 
                 if (sum < bestSum) {
                     bestSum = sum;
@@ -335,7 +335,7 @@ public:
                 j++;
             }
             
-            cout << "i: " << i << " dist: " << sum << endl;
+//            cout << "i: " << i << " dist: " << sum << endl;
             
             if (sum < bestSum) {
                 bestSum = sum;
@@ -416,7 +416,7 @@ public:
                 j++;
             }
             
-            cout << "i: " << i << " " << sum << endl;
+//            cout << "i: " << i << " " << sum << endl;
             
             if (sum < bestSum) {
                 bestSum = sum;

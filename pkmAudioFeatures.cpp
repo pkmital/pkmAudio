@@ -287,16 +287,16 @@ void pkmAudioFeatures::compute36DimAudioFeaturesF(float *inputSignal, float *out
     
 	vDSP_mmul(fft_magnitudes, 1, CQT, 1, cqtVector, 1, 1, cqtN, fftOutN);
 	
-    /*
-	// LFCC 
-	a = cqtN;
-	ptr1 = cqtVector;
-	while( a-- )
-    {
-		float f = *ptr1;
-		*ptr1++ = f == 0 ? 0 : log10f( f*f );
-	}
-    */
+    
+//	// LFCC 
+//	a = cqtN;
+//	ptr1 = cqtVector;
+//	while( a-- )
+//    {
+//		float f = *ptr1;
+//		*ptr1++ = f == 0 ? 0 : log10f( 1.1f + a / (float)cqtN ) * f;
+//	}
+    
     
     vDSP_mmul(cqtVector, 1, DCT, 1, foutput, 1, 1, dctN, cqtN);
     
