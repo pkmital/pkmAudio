@@ -48,7 +48,8 @@ pkmAudioFeatures::pkmAudioFeatures(int sample_rate, int fft_size)
 	sampleRate = sample_rate;
 	fftN = fft_size;
 	
-	setup();
+	setupCepstral();
+    setupChromagram();
 }
 
 pkmAudioFeatures::~pkmAudioFeatures()
@@ -70,9 +71,12 @@ pkmAudioFeatures::~pkmAudioFeatures()
     free(previousDeltaLFCCs);
 	
 	free(foutput);
+    
+    free(note);
+    free(chroma);
 }
 
-void pkmAudioFeatures::setup()
+void pkmAudioFeatures::setupCepstral()
 {
 	bpoN = 12;
 	
@@ -120,6 +124,18 @@ void pkmAudioFeatures::setup()
 	// initialize maps
 	createLogFreqMap();
 	createDCT();
+}
+
+void pkmAudioFeatures::setupChromagram()
+{
+    
+    float base = 130.81278265;
+    note = (float *)malloc(sizeof(float) *12);
+    chroma = (float *)malloc(sizeof(float) *12);
+    for (int i = 0;i < 12;i++)
+    {
+        note[i] = base*pow(2,(((float) i)/12));
+    }
 }
 
 void pkmAudioFeatures::createLogFreqMap()
@@ -219,12 +235,8 @@ void pkmAudioFeatures::computeMelFeatures(float *input, float *output, int numFi
 	fft->forward(0, input, fft_magnitudes, fft_phases);
 	
 	// sparse matrix product of CQT * FFT
-	int a = 0;
-	float *ptr1 = 0;
-	
-    
     if (numFilters == -1) {
-        vDSP_mmul(fft_magnitudes, 1, CQT, 1, output, 1, 1, cqtN, fftOutN);   
+        vDSP_mmul(fft_magnitudes, 1, CQT, 1, output, 1, 1, cqtN, fftOutN);
     }
     else if (numFilters <= cqtN)
     {
@@ -234,6 +246,47 @@ void pkmAudioFeatures::computeMelFeatures(float *input, float *output, int numFi
     else {
         cerr << "[ERROR]: pkmAudioFeatures: Incorrect number of filters" << endl;
     }
+    
+    // Normalize
+    pkm::Mat outputMat(1, numFilters, output, false);
+    outputMat.divideEachVecByMaxVecElement(true);
+}
+
+void pkmAudioFeatures::computeDeltaMelFeatures(float *input, float *output, int numFilters)
+{
+    // should window input buffer before FFT
+	fft->forward(0, input, fft_magnitudes, fft_phases);
+	
+	// sparse matrix product of CQT * FFT
+    
+    if (numFilters == -1) {
+        vDSP_mmul(fft_magnitudes, 1, CQT, 1, output, 1, 1, cqtN, fftOutN);
+    }
+    else if (numFilters <= cqtN)
+    {
+        vDSP_mmul(fft_magnitudes, 1, CQT, 1, cqtVector, 1, 1, cqtN, fftOutN);
+        cblas_scopy(numFilters, cqtVector, 1, output, 1);
+    }
+    else {
+        cerr << "[ERROR]: pkmAudioFeatures: Incorrect number of filters" << endl;
+    }
+    
+    // Normalize
+    pkm::Mat outputMat(1, numFilters, output, false);
+    outputMat.divideEachVecByMaxVecElement(true);
+    
+    // lfcc'
+    vDSP_vsub(output, 1,
+              previousLFCCs, 1,
+              output + numFilters, 1,
+              numFilters);
+    
+    // Normalize
+    pkm::Mat outputMat2(1, numFilters, output + numFilters, false);
+    outputMat.divideEachVecByMaxVecElement(true);
+    
+    // store
+    cblas_scopy(numFilters, output, 1, previousLFCCs, 1);
 }
 
 void pkmAudioFeatures::computeLFCCF(float *input, float *output, int numLFCCS)
@@ -276,49 +329,23 @@ void pkmAudioFeatures::computeLFCCF(float *input, float *output, int numLFCCS)
 	
 }
 
+void pkmAudioFeatures::compute24DimAudioFeaturesF(float *inputSignal, float *outputFeatures)
+{
+    // write 12 features for Mel and another 12 for Delta Mel
+	computeMelFeatures(inputSignal, outputFeatures, 12);
+    
+    // write last 12 for Chromagram
+    computeChromagram(getMagnitudes(), outputFeatures + 12);
+}
+
+
 void pkmAudioFeatures::compute36DimAudioFeaturesF(float *inputSignal, float *outputFeatures)
 {
-	// should window input buffer before FFT
-	fft->forward(0, inputSignal, fft_magnitudes, fft_phases, true);
-	
-	// sparse matrix product of CQT * FFT
-	int a = 0;
-	float *ptr1 = 0; 
+    // write 12 features for Mel and another 12 for Delta Mel
+	computeDeltaMelFeatures(inputSignal, outputFeatures, 12);
     
-	vDSP_mmul(fft_magnitudes, 1, CQT, 1, cqtVector, 1, 1, cqtN, fftOutN);
-	
-    
-//	// LFCC 
-//	a = cqtN;
-//	ptr1 = cqtVector;
-//	while( a-- )
-//    {
-//		float f = *ptr1;
-//		*ptr1++ = f == 0 ? 0 : log10f( 1.1f + a / (float)cqtN ) * f;
-//	}
-    
-    
-    vDSP_mmul(cqtVector, 1, DCT, 1, foutput, 1, 1, dctN, cqtN);
-    
-    // lfcc
-    float n = dctN;
-    vDSP_vsdiv(foutput, 1, &n, outputFeatures, 1, numberOfDCTBands);
-    
-    // lfcc'
-    vDSP_vsub(outputFeatures, 1, 
-              previousLFCCs, 1, 
-              outputFeatures + numberOfDCTBands, 1, 
-              numberOfDCTBands);
-    
-    // lfcc''
-    vDSP_vsub(outputFeatures + numberOfDCTBands, 1, 
-              previousDeltaLFCCs, 1, 
-              outputFeatures + numberOfDCTBands + numberOfDCTBands, 1, 
-              numberOfDCTBands);
-    
-    // store
-    cblas_scopy(numberOfDCTBands, outputFeatures, 1, previousLFCCs, 1);
-    cblas_scopy(numberOfDCTBands, outputFeatures + numberOfDCTBands, 1, previousDeltaLFCCs, 1);
+    // write last 12 for Chromagram
+    computeChromagram(getMagnitudes(), outputFeatures + 24);
 }
 
 void pkmAudioFeatures::computeLFCCFromMagnitudesF(float *fft_magnitudes, float *outputFeatures, int numLFCCS)
@@ -443,6 +470,53 @@ void pkmAudioFeatures::computeLFCCFromMagnitudesD(float *fft_magnitudes, double*
 	}
 	
 }
+
+void pkmAudioFeatures::computeChromagram(float *fftMagnitudes, float *outputFeatures)
+{
+    int octaves = 2;
+    int harmonics = 2;
+    int search = 2;
+    int searchlength;
+    
+    float *mag = fftMagnitudes;
+    
+    float ratio = sampleRate / (float) fftN;
+    
+    for (int i = 0; i < 12; i++)
+    {
+        float sum = 0;
+        for (int oct = 1;oct <= octaves;oct++)
+        {
+            float noteval = (note[i]/ratio)*((float) oct);
+            float notesum = 0;
+            
+            for (int h = 1;h <= harmonics;h++)
+            {
+                int index = round(noteval*((float) h));
+                
+                searchlength = search*h;
+                float maxval = 0;
+                for (int n = (index-searchlength);n <= index+searchlength;n++)
+                {
+                    if (mag[n] > maxval)
+                    {
+                        maxval = mag[n];
+                    }
+                }
+                notesum = notesum+(maxval*(1/((float) h)));
+            }
+            sum = sum + notesum;
+            
+        }
+        chroma[i] = sum;
+        outputFeatures[i] = sum;
+    }
+    
+    pkm::Mat outputMat(1, 12, outputFeatures, false);
+    outputMat.divideEachVecByMaxVecElement(true);
+    
+}
+
 
 float pkmAudioFeatures::cosineDistance(float *x, float *y, unsigned int count) {
 	float dotProd, magX, magY;

@@ -30,10 +30,14 @@ public:
     
     void setMinSegmentLength(int frames);
     void setOnsetThreshold(float thresh);
+    void setIIRAlpha(float alpha);
+    
+    pkm::Mat fluxWaveform;
     
 protected:
     pkmFFT *fft;
     float currentFlux, deltaFlux, previousFlux;
+    pkm::Mat meanFlux, meanSqrFlux, stdFlux;
     pkm::Mat magnitudes, phases, fluxHistory;
     int frameSize;
     int fluxHistorySize;
@@ -41,4 +45,8 @@ protected:
     int minSegmentLength;
     int numFramesSinceLastOnset;
     float threshold;
+    
+    
+    // IIR alpha
+    float alpha;
 };

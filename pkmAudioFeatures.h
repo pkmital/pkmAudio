@@ -111,6 +111,8 @@ public:
 	~pkmAudioFeatures();
     
     void computeMelFeatures(float *inputSignal, float *outputFeatures, int numFilters = -1);
+    
+    void computeDeltaMelFeatures(float *inputSignal, float *outputFeatures, int numFilters = -1);
 	
 	void computeLFCCF(float *inputSignal, float *outputFeatures, int numLFCCS=-1);
 	void computeLFCCD(float *inputSignal, double *outputFeatures, int numLFCCS = -1);
@@ -118,9 +120,12 @@ public:
 	void computeLFCCFromMagnitudesF(float *fftMagnitudes, float *outputFeatures, int numLFCCS=-1);
 	void computeLFCCFromMagnitudesD(float *fftMagnitudes, double *outputFeatures, int numLFCCS = -1);
 	
+    void computeChromagram(float *fftMagnitudes, float *outputFeatures);
+    
     // get pointer to calculated magnitude/phase after calculating features
 	float *getMagnitudes();
 	float *getPhases();
+    float *getChromagram();
     
     inline int getMagnitudesLength()
     {
@@ -134,7 +139,11 @@ public:
 		return dctN;
 	}
     
-    // calculate a 13 + 13 + 13 dimensional audio feature vector composed of LFCC + delta LFCC + delta delta LFCC
+
+    // calculate a 12 + 12 + 12 dimensional audio feature vector composed of Mel + Chromagram
+    void compute24DimAudioFeaturesF(float *inputSignal, float *outputFeatures);
+    
+    // calculate a 12 + 12 + 12 dimensional audio feature vector composed of Mel + delta Mel + Chromagram
     void compute36DimAudioFeaturesF(float *inputSignal, float *outputFeatures);
 	
 	static float cosineDistance(float *x, float *y, unsigned int count);
@@ -142,7 +151,9 @@ public:
 	
 private:
 	
-	void setup();
+	void setupCepstral();
+	void setupChromagram();
+    
 	void createLogFreqMap();
 	void createDCT();
 	
@@ -167,6 +178,9 @@ private:
 	float			fratio;
 	
 	pkmFFT			*fft;
+    
+    float           *chroma;
+    float           *note;
 	
 	float			*fft_magnitudes,
 					*fft_phases;

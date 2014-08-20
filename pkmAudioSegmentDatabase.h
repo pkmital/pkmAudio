@@ -32,16 +32,18 @@ using namespace std;
 #include "pkmMatrix.h"
 #include "pkmAudioSegment.h"
 #include "pkmEXTAudioFileReader.h"
-#include "flann.h"
 #include <Accelerate/Accelerate.h>
-#include "ofUtils.h"
-#include "ofTypes.h"
+#include "ofMain.h"
 
 // recreate without flann, use vector of mat's for featuredatabase, and use dtw for matching
 // could try and do timestretching based on matched path...
 
 //#define WITH_FLANN
 //#define WITH_COSINE_DISTANCE
+
+#ifdef WITH_FLANN
+    #include <flann/flann.h>
+#endif
 
 class pkmAudioSegmentDatabase
 {
@@ -54,8 +56,14 @@ public:
         totalSamples    = 0;
         k				= 1;												// number of nearest neighbors
 		nnIdx			= (int *)malloc(sizeof(int)*k);						// allocate near neighbor indices
-		dists			= (float *)malloc(sizeof(float)*k);					// allocate near neighbor dists	
+		dists			= (float *)malloc(sizeof(float)*k);					// allocate near neighbor dists
         
+        font.loadFont("DekarLight.ttf", 14);
+        
+        bMutex          = false;
+        bScreenMappingMutex = false;
+        bBuiltScreenMapping = false;
+        bSelectingFromMapping = false;
 #ifdef WITH_FLANN
         //query			= (float *)malloc(sizeof(float)*feature_length);	// pre-allocate a query frame
 		flannParams = DEFAULT_FLANN_PARAMETERS;
@@ -93,6 +101,11 @@ public:
     
     void resetDatabase()
     {
+        while(bMutex)
+        {
+            
+        }
+        bMutex = true;
         vector<ofPtr<pkmAudioSegment> >::iterator it = audioDatabase.begin();
         while (it != audioDatabase.end()) {
             it->reset();
@@ -106,6 +119,8 @@ public:
 		}
         featureDatabase = pkm::Mat();
         bBuiltIndex = false;
+        bBuiltScreenMapping = false;
+        bMutex = false;
     }
     
     
@@ -130,8 +145,16 @@ public:
 	
     bool bShouldAddSegment(float *data)
     {
+        while(bMutex)
+        {
+//            cout << "checking SHIT!" << endl;
+        }
+        bMutex = true;
         if(!bBuiltIndex)
+        {
+            bMutex = false;
             return ~isnan(data[0]) && ~isinf(data[0]);
+        }
 #ifdef WITH_FLANN
         if (flann_find_nearest_neighbors_index_float(kdTree, 
 													 data, 
@@ -141,39 +164,37 @@ public:
 													 k, 
 													 &flannParams) < 0)
 		{
+            bMutex = false;
             return true;
         }
         else if(dists[0] > 0.001)
         {
             //cout << "adding: " << dists[0] << endl;
+            bMutex = false;
             return true;
         }
         else 
         {
 //            printf("[pkmAudioSegmentDatabase]: Too similar to database, not adding: %f\n", dists[0]);
+            bMutex = false;
             return false;
         }
 #else
         if (featureDatabase.rows > 0) 
         {
-            float *testData = data;
             float bestSum = HUGE_VAL;
-            int bestIdx = 0;
             int i = 0;
             
             while(i < featureDatabase.rows) {
-                float *curData = featureDatabase.row(i);
 
                 float sum = 0;
                 int j = 0;
                 
                 while (j < featureDatabase.cols) {
-                    float a = *curData++ - testData[j];
+                    float a = featureDatabase.row(i)[j] - data[j];
                     sum += abs(a);
                     j++;
                 }
-                
-//                cout << "i: " << i << " dist: " << sum << endl;
                 
                 if (sum < bestSum) {
                     bestSum = sum;
@@ -182,18 +203,30 @@ public:
                 i++;
             }
             cout << "bestSum: " << bestSum << endl;
-            return ~isinf(bestSum) && ~isnan(bestSum) && bestSum > 0.010;
+            bMutex = false;
+            return ~isinf(bestSum) && ~isnan(bestSum) && bestSum > 0.0010;
         }
         else {
+            bMutex = false;
             return true;
         }
 #endif
+        bMutex = false;
+        return false;
     }
     
     bool bShouldAddSequence(pkm::Mat featureSequence)
     {
+        
         if(!bBuiltIndex)
             return true;
+        
+        while(bMutex)
+        {
+            
+        }
+        bMutex = true;
+        
 #ifdef WITH_FLANN
         if (flann_find_nearest_neighbors_index_float(kdTree, 
 													 featureSequence.data, 
@@ -203,15 +236,18 @@ public:
 													 k, 
 													 &flannParams) < 0)
 		{
+            bMutex = false;
             return true;
         }
         else if(dists[0] > 0.001)
         {
+            bMutex = false;
             return true;
         }
         else 
         {
 //            printf("[pkmAudioSegmentDatabase]: Too similar to database, not adding: %f\n", dists[0]);
+            bMutex = false;
             return false;
         }
 #else
@@ -235,17 +271,26 @@ public:
                 }
                 i++;
             }
-            //cout << "dist: " << minDist << endl;
-            return ~isinf(minDist) && ~isnan(minDist) && minDist > 0.010;
+//            cout << "dist: " << minDist << endl;
+            bMutex = false;
+            return ~isinf(minDist) && ~isnan(minDist) && minDist > 0.0010;
         }
         else {
+            bMutex = false;
             return true;
         }
 #endif
+        bMutex = false;
     }
     
     void addAudioSegment(ofPtr<pkmAudioSegment> segment, float *descriptor, int descriptor_size)
     {
+        while(bMutex)
+        {
+//            cout << "adding SHIT!" << endl;
+        }
+        bMutex = true;
+        
         if (maxObjects > 0 && featureDatabase.rows > maxObjects)
         {
             totalSamples -= (audioDatabase[currentIdx]->offset - audioDatabase[currentIdx]->onset);
@@ -261,10 +306,18 @@ public:
             totalSamples += (segment->offset - segment->onset);
             featureDatabase.push_back(descriptor, descriptor_size);
         }
+        
+        bMutex = false;
     }
     
     void addAudioSequence(ofPtr<pkmAudioSegment> segment, pkm::Mat featureSequence)
     {
+        while(bMutex)
+        {
+            
+        }
+        bMutex = true;
+        
         audioDatabase.push_back(segment);
         totalSamples += (segment->offset - segment->onset);
         featureDatabase.push_back(featureSequence);
@@ -272,16 +325,25 @@ public:
         float currentLookup = audioDatabase.size();
         pkm::Mat lookupTable(featureSequence.rows, 1, currentLookup);
         databaseLookupTable.push_back(lookupTable);
+
+        bMutex = false;
     }
     
 	// rebuild the index after segmenting
 	void buildIndex()
-	{		
+	{
+        while(bMutex)
+        {
+            
+        }
+        bMutex = true;
+        
 #ifdef WITH_FLANN
 		if(bBuiltIndex)
 		{
 			flann_free_index(kdTree, 
 							 &flannParams);
+            bMutex = false;
 			bBuiltIndex = false;
 		}
         
@@ -296,12 +358,210 @@ public:
         //printf("Speed up of %f over linear indexing.\n", speedup);
 #endif
         
-		bBuiltIndex = true;	
-              
+		bBuiltIndex = true;
+        
+        bMutex = false;
+        
 	}
-	
+    
+    void buildScreenMapping()
+    {
+        if (featureDatabase.rows > 32) {
+            
+            while(bMutex)
+            {
+                
+            }
+            bMutex = true;
+            
+            normalizedDatabase = featureDatabase.rowRange(1, featureDatabase.rows, true);
+            normalizedDatabase.subtract(0.5f);
+            pkm::Mat U, S, V_t;
+            if ( normalizedDatabase.svd(U, S, V_t) == 0 )
+            {
+                while (bScreenMappingMutex) {
+                    
+                }
+                bScreenMappingMutex = true;
+                
+                xy_mapping = V_t.colRange(0, 2, true);
+//                xy_mapping = V_t.rowRange(0, 2, true);
+//                xy_mapping.setTranspose();
+                xys = normalizedDatabase.GEMM(xy_mapping);
+                xys.zNormalizeEachCol();
+                bBuiltScreenMapping = true;
+//                xys.print();
+                
+                bScreenMappingMutex = false;
+            }
+            
+            bMutex = false;
+        }
+    }
+    
+    void updateScreenMapping()
+    {
+        if(bBuiltScreenMapping) {
+            
+            while (bScreenMappingMutex) {
+                
+            }
+            bScreenMappingMutex = true;
+            
+            normalizedDatabase = featureDatabase.rowRange(1, featureDatabase.rows, true);
+            normalizedDatabase.subtract(0.5f);
+            xys = normalizedDatabase.GEMM(xy_mapping);
+            xys.zNormalizeEachCol();
+            
+            bScreenMappingMutex = false;
+        }
+    }
+    
+    void drawDatabase(int width, int height, float radius = 5.0f)
+    {
+        if(bBuiltScreenMapping) {
+            
+            while (bScreenMappingMutex) {
+                
+            }
+            bScreenMappingMutex = true;
+            
+            ofPushStyle();
+            ofEnableAntiAliasing();
+            ofEnableSmoothing();
+            glEnable(GL_LINE_SMOOTH);
+            ofPushMatrix();
+            ofFill();
+            ofTranslate(width / 2.0, height / 2.0);
+            ofScale(0.5, 0.5);
+            ofBeginShape();
+            
+            int prev_x = 0;
+            int prev_y = 0;
+            
+            for (int row_i = 0; row_i < xys.rows; row_i++) {
+                float x = xys.row(row_i)[0] * width / 2.0;
+                float y = xys.row(row_i)[1] * height / 2.0;
+                if (audioDatabase[row_i+1]->bPlaying) {
+                    if (prev_x && prev_y) {
+                        ofSetColor(140, 180, 140);
+                        ofLine(prev_x, prev_y, x, y);
+                    }
+                    prev_x = x;
+                    prev_y = y;
+                    
+                    ofSetColor(200, 240, 200);
+                    ofCircle(x, y, radius + ((rand() % 100) - 50) / 20.0);
+                }
+                else {
+                    ofSetColor(220, 220, 220);
+                    
+                    ofCircle(x, y, radius);
+                }
+                
+//                ofRect(x, y, radius, radius);
+//                font.drawString(ofToString(row_i), x, y);
+            }
+            ofSetColor(140, 180, 140);
+            ofPopMatrix();
+            ofPopStyle();
+            
+            bScreenMappingMutex = false;
+        }
+        else {
+            string str="Learn more sounds before \n  using interactive mode";
+            font.drawString(str, width / 2 - font.stringWidth(str) / 2.0, height / 2);
+        }
+    }
+    
+    vector<ofPtr<pkmAudioSegment> > selectFromDatabase(float x, float y, int width, int height)
+    {
+        
+        vector<ofPtr<pkmAudioSegment> > nearestAudioSegments;
+//        int k = 1;
+        
+        if(bBuiltScreenMapping)
+        {
+            if (bSelectingFromMapping) {
+                return nearestAudioSegments;
+            }
+            bSelectingFromMapping = true;
+            
+//            while (bScreenMappingMutex) {
+//                
+//            }
+//            bScreenMappingMutex = true;
+            
+            float sum = 0;
+            
+            for (int m = 0; m < k; m++) {
+                nnIdx[m] = 0;
+                dists[m] = HUGE_VALF;
+            }
+            
+            x -= (width / 2.0);
+            y -= (height / 2.0);
+            
+            x /= (width / 4.0);
+            y /= (height / 4.0);
+            
+            for (int row_i = 0; row_i < xys.rows; row_i++) {
+                float this_x = xys.row(row_i)[0];
+                float this_y = xys.row(row_i)[1];
+                
+                sum = ofDist(this_x, this_y, x, y);
+                
+                int n = row_i + 1;
+                for (int m = 0; m < k; m++) {
+                    if (sum < dists[m]) {
+                        float temp = dists[m];
+                        dists[m] = sum;
+                        sum = temp;
+                        
+                        int temp2 = nnIdx[m];
+                        nnIdx[m]= n;
+                        n = temp2;
+                    }
+                }
+            }
+//            bScreenMappingMutex = false;
+            
+            while (bMutex) {
+                
+            }
+            bMutex = true;
+//            cout << "size: " << audioDatabase.size() << endl;
+            for (int i = 0; i < k; i++)
+            {
+                if (nnIdx[i] < audioDatabase.size()) {
+                    //printf("i-th idx: %d, dist: %f\n", nnIdx[i], dists[i]);
+                    ofPtr<pkmAudioSegment> p = (audioDatabase[nnIdx[i]]);
+                    
+                    if (p != NULL && !p->bPlaying) {
+//                        cout << i << endl;
+                        p->frame = 0;
+                        p->bPlaying = true;
+                        nearestAudioSegments.push_back(p);
+                    }
+                }
+            }
+            
+            bMutex = false;
+        }
+        
+        bSelectingFromMapping = false;
+        return nearestAudioSegments;
+    }
+    
+//
 	vector<ofPtr<pkmAudioSegment> > getNearestAudioSegments(ofPtr<pkmAudioSegment> segment)
 	{
+        while(bMutex)
+        {
+            
+        }
+        bMutex = true;
+        
 		vector<ofPtr<pkmAudioSegment> > nearestAudioSegments;
 		int i;
 		if (!bBuiltIndex) {
@@ -318,11 +578,16 @@ public:
 													 &flannParams) < 0)
 		{
 			printf("[ERROR] No frames found for Nearest Neighbor Search!\n");
+            bMutex = false;
 			return nearestAudioSegments;
 		}
 #else
-        float bestSum = HUGE_VAL;
-        int bestIdx = 0;
+
+        for (int m = 0; m < k; m++) {
+            nnIdx[m] = 0;
+            dists[m] = HUGE_VALF;
+        }
+        
         i = 0;
         float *testData = segment->descriptor.data;
         while(i < featureDatabase.rows) {
@@ -337,24 +602,23 @@ public:
             
 //            cout << "i: " << i << " dist: " << sum << endl;
             
-            if (sum < bestSum) {
-                bestSum = sum;
-                bestIdx = i;
+            int n = i;
+            for (int m = 0; m < k; m++) {
+                if (sum < dists[m]) {
+                    float temp = dists[m];
+                    dists[m] = sum;
+                    sum = temp;
+                    
+                    int temp2 = nnIdx[m];
+                    nnIdx[m]= n;
+                    n = temp2;
+                }
             }
             
             i++;
         }
         
-        nnIdx[0] = bestIdx;
-        dists[0] = bestSum;
 #endif
-		
-		float sumDists = 0;
-		i = 0;
-		while (i < k) {
-			sumDists += dists[i];
-			i++;
-		}
 		
 		for (int i = 0; i < k; i++) 
 		{
@@ -376,6 +640,8 @@ public:
             
 		}
         
+        bMutex = false;
+        
 		return nearestAudioSegments;
 	}
     
@@ -383,10 +649,17 @@ public:
     
     vector<ofPtr<pkmAudioSegment> > getNearestAudioSegments(float *descriptor)
 	{
+        while(bMutex)
+        {
+            
+        }
+        bMutex = true;
+        
 		vector<ofPtr<pkmAudioSegment> > nearestAudioSegments;
 		int i;
 		if (!bBuiltIndex) {
 			//printf("[ERROR] First build the index with buildIndex()");
+            bMutex = false;
 			return nearestAudioSegments;
 		}
 #ifdef WITH_FLANN
@@ -399,35 +672,46 @@ public:
 													 &flannParams) < 0)
 		{
 			printf("[ERROR] No frames found for Nearest Neighbor Search!\n");
+            bMutex = false;
 			return nearestAudioSegments;
 		}
 #else
-        float bestSum = HUGE_VAL;
-        int bestIdx = 0;
+        for (int m = 0; m < k; m++) {
+            nnIdx[m] = 0;
+            dists[m] = HUGE_VALF;
+        }
+        
         i = 0;
         float *testData = descriptor;
         while(i < featureDatabase.rows) {
-            float *curData = featureDatabase.row(i);
             float sum = 0;
             int j = 0;
             while (j < featureDatabase.cols) {
-                float a = *curData++ - testData[j];
+                float a = featureDatabase.row(i)[j] - testData[j];
                 sum += abs(a);
                 j++;
             }
             
 //            cout << "i: " << i << " " << sum << endl;
             
-            if (sum < bestSum) {
-                bestSum = sum;
-                bestIdx = i;
+            int n = i;
+            for (int m = 0; m < k; m++) {
+                if (sum < dists[m]) {
+                    float temp = dists[m];
+                    dists[m] = sum;
+                    sum = temp;
+                    
+                    int temp2 = nnIdx[m];
+                    nnIdx[m]= n;
+                    n = temp2;
+                }
             }
+            
             i++;
         }
         
-        nnIdx[0] = bestIdx;
-        dists[0] = bestSum;
 #endif
+        bMutex = false;
 		
 		float sumDists = 0;
 		i = 0;
@@ -438,8 +722,8 @@ public:
 		
 		for (int i = 0; i < k; i++) 
 		{
-            if (nnIdx[i] < audioDatabase.size()) {
-                //printf("K: %d, i-th idx: %d, dist: %f\n", i, nnIdx[i], dists[i]);
+            if (nnIdx[i] < audioDatabase.size() && dists[i] < 100000.0f) {
+//                printf("K: %d, i-th idx: %d, dist: %f\n", i, nnIdx[i], dists[i]);
                 ofPtr<pkmAudioSegment> p = (audioDatabase[nnIdx[i]]);
                 if (!p->bPlaying) {
                     p->frame = 0;
@@ -456,10 +740,17 @@ public:
     
     vector<ofPtr<pkmAudioSegment> > getNearestAudioSequences(pkm::Mat featureSequence)
     {
+        while(bMutex)
+        {
+//            cout << "getting SHIT!" << endl;
+        }
+        bMutex = true;
+        
         vector<ofPtr<pkmAudioSegment> > nearestAudioSegments;
         int i;
         if (!bBuiltIndex) {
             //printf("[ERROR] First build the index with buildIndex()");
+            bMutex = false;
             return nearestAudioSegments;
         }
 #ifdef WITH_FLANN
@@ -472,6 +763,7 @@ public:
                                                      &flannParams) < 0)
         {
             printf("[ERROR] No frames found for Nearest Neighbor Search!\n");
+            bMutex = false;
             return nearestAudioSegments;
         }
         
@@ -538,6 +830,7 @@ public:
                 //}
             }
         }
+        bMutex = false;
         return nearestAudioSegments;
     }
     
@@ -662,8 +955,13 @@ public:
 	int                                 feature_length;
 	// For kNN - using C-version of FlANN
 	pkm::Mat							featureDatabase;
+    pkm::Mat                            normalizedDatabase;
+    pkm::Mat                            xy_mapping;
+    pkm::Mat                            xys;
     pkm::Mat                            databaseMatches;
     pkm::Mat                            databaseLookupTable;
+    
+    ofTrueTypeFont                      font;
     
     long long                           totalSamples;
     
@@ -681,7 +979,7 @@ public:
 	int									numFeatures,	// dimension of each point
                                         numFrames;		// number of feature point frames
     
-	bool								bBuiltIndex;
+	bool								bBuiltIndex, bMutex, bScreenMappingMutex, bBuiltScreenMapping, bSelectingFromMapping;
     
     
     void sequenceMatch(

@@ -46,8 +46,8 @@ public:
 	{
 		int ratio = 1;
 		frameSize = fS;
-		rampInLength = frameSize / 10;
-		rampOutLength = frameSize / 10;
+		rampInLength = 256;
+		rampOutLength = 256;
 		window = (float *)malloc(sizeof(float) * frameSize / (ratio/2.0f));
 		rampInBuffer = (float *)malloc(sizeof(float) * rampInLength);
 		rampOutBuffer = (float *)malloc(sizeof(float) * rampOutLength);
@@ -55,8 +55,8 @@ public:
 		vDSP_hann_window(window, frameSize/(ratio/2.0f), vDSP_HANN_DENORM);
 		//float scalar = 2.0f;
 		//vDSP_vsmul(window, 1, &scalar, window, 1, frameSize*2);
-		cblas_scopy(frameSize/ratio, window, 1, rampInBuffer, 1);
-		cblas_scopy(frameSize/ratio, window+frameSize/ratio, 1, rampOutBuffer+frameSize*(ratio-1)/ratio, 1);
+		cblas_scopy(rampInLength, window, 1, rampInBuffer, 1);
+		cblas_scopy(rampOutLength, window+frameSize/ratio, 1, rampOutBuffer+frameSize*(ratio-1)/ratio, 1);
 		
 		for (int i = frameSize/ratio; i < frameSize; i++) {
 			rampInBuffer[i] = 1.0f;
