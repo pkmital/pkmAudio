@@ -375,7 +375,8 @@ public:
             bMutex = true;
             
             normalizedDatabase = featureDatabase.rowRange(1, featureDatabase.rows, true);
-            normalizedDatabase.subtract(0.5f);
+            pkm::Mat meanMat = normalizedDatabase.mean();
+            normalizedDatabase.subtract(meanMat);
             pkm::Mat U, S, V_t;
             if ( normalizedDatabase.svd(U, S, V_t) == 0 )
             {
@@ -383,10 +384,9 @@ public:
                     
                 }
                 bScreenMappingMutex = true;
-                
-                xy_mapping = V_t.colRange(0, 2, true);
-//                xy_mapping = V_t.rowRange(0, 2, true);
-//                xy_mapping.setTranspose();
+//                xy_mapping = V_t.colRange(0, 2, true);
+                xy_mapping = V_t.rowRange(0, 2, true);
+                xy_mapping.setTranspose();
                 xys = normalizedDatabase.GEMM(xy_mapping);
                 xys.zNormalizeEachCol();
                 bBuiltScreenMapping = true;
@@ -537,7 +537,7 @@ public:
                     //printf("i-th idx: %d, dist: %f\n", nnIdx[i], dists[i]);
                     ofPtr<pkmAudioSegment> p = (audioDatabase[nnIdx[i]]);
                     
-                    if (p != NULL && !p->bPlaying) {
+                    if (p != NULL) {
 //                        cout << i << endl;
                         p->frame = 0;
                         p->bPlaying = true;
