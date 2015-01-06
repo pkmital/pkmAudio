@@ -374,23 +374,38 @@ public:
             }
             bMutex = true;
             
-            normalizedDatabase = featureDatabase.rowRange(1, featureDatabase.rows, true);
-            pkm::Mat meanMat = normalizedDatabase.mean();
-            normalizedDatabase.subtract(meanMat);
+            normalizedDatabase = featureDatabase.rowRange(1, featureDatabase.rows, false);
+            pkm::Mat X_t = normalizedDatabase.getTranspose();
+//            cout << "X_t:" << endl;
+//            X_t.printAbbrev();
+            pkm::Mat covDatabase = X_t.GEMM(normalizedDatabase);
+//            covDatabase.subtract(covDatabase.mean(true), covDatabase);
+//            covDatabase.subtract(covDatabase.mean(false), covDatabase);
+            
             pkm::Mat U, S, V_t;
-            if ( normalizedDatabase.svd(U, S, V_t) == 0 )
+            if ( covDatabase.svd(U, S, V_t) == 0 )
             {
                 while (bScreenMappingMutex) {
                     
                 }
                 bScreenMappingMutex = true;
-//                xy_mapping = V_t.colRange(0, 2, true);
-                xy_mapping = V_t.rowRange(0, 2, true);
-                xy_mapping.setTranspose();
+
+//                cout << "U: " << endl;
+//                U.printAbbrev();
+//                cout << "V_t: " << endl;
+//                V_t.printAbbrev();
+                
+                xy_mapping = V_t.colRange(0, 2, true);
+//                xy_mapping.setTranspose();
+//                cout << "pcs:" << endl;
+//                xy_mapping.printAbbrev();
                 xys = normalizedDatabase.GEMM(xy_mapping);
-                xys.zNormalizeEachCol();
+                xys.setNormalize(false);
+                xys.subtract(0.5f);
+                xys.multiply(3.0f);
+//                cout << "xys:" << endl;
+//                xys.printAbbrev();
                 bBuiltScreenMapping = true;
-//                xys.print();
                 
                 bScreenMappingMutex = false;
             }
@@ -408,10 +423,11 @@ public:
             }
             bScreenMappingMutex = true;
             
-            normalizedDatabase = featureDatabase.rowRange(1, featureDatabase.rows, true);
-            normalizedDatabase.subtract(0.5f);
+            normalizedDatabase = featureDatabase.rowRange(1, featureDatabase.rows, false);
             xys = normalizedDatabase.GEMM(xy_mapping);
-            xys.zNormalizeEachCol();
+            xys.setNormalize(false);
+            xys.subtract(0.5f);
+            xys.multiply(3.0f);
             
             bScreenMappingMutex = false;
         }
@@ -460,7 +476,7 @@ public:
                 }
                 
 //                ofRect(x, y, radius, radius);
-//                font.drawString(ofToString(row_i), x, y);
+                font.drawString(ofToString(row_i), x, y);
             }
             ofSetColor(140, 180, 140);
             ofPopMatrix();
