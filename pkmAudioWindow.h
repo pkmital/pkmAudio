@@ -45,34 +45,35 @@ public:
 	static void initializeWindow(int fS = 512)
 	{
 		int ratio = 1;
-		frameSize = fS;
-		rampInLength = 256;
-		rampOutLength = 256;
-		window = (float *)malloc(sizeof(float) * frameSize / (ratio/2.0f));
+		frameSize = 256;
+		rampInLength = 128;
+		rampOutLength = 128;
+		window = (float *)malloc(sizeof(float) * frameSize);
 		rampInBuffer = (float *)malloc(sizeof(float) * rampInLength);
 		rampOutBuffer = (float *)malloc(sizeof(float) * rampOutLength);
 		
-		vDSP_hann_window(window, frameSize/(ratio/2.0f), vDSP_HANN_DENORM);
+		vDSP_hann_window(window, frameSize, vDSP_HANN_DENORM);
 		//float scalar = 2.0f;
 		//vDSP_vsmul(window, 1, &scalar, window, 1, frameSize*2);
 		cblas_scopy(rampInLength, window, 1, rampInBuffer, 1);
-		cblas_scopy(rampOutLength, window+frameSize/ratio, 1, rampOutBuffer+frameSize*(ratio-1)/ratio, 1);
+        int window_offset = frameSize - rampOutLength;
+		cblas_scopy(rampOutLength, window + window_offset, 1, rampOutBuffer, 1);
 		
-		for (int i = frameSize/ratio; i < frameSize; i++) {
-			rampInBuffer[i] = 1.0f;
-		}
-		
-		for (int i = 0; i < frameSize*(ratio-1)/ratio; i++) {
-			rampOutBuffer[i] = 1.0f;
-		}
+//		for (int i = frameSize/ratio; i < frameSize; i++) {
+//			rampInBuffer[i] = 1.0f;
+//		}
+//		
+//		for (int i = 0; i < frameSize*(ratio-1)/ratio; i++) {
+//			rampOutBuffer[i] = 1.0f;
+//		}
 		
 		
 		rampInBuffer[0] = 0.0f;
 		rampOutBuffer[rampOutLength-1] = 0.0f;
 		
-        /*
-		printf("Window (%d samples):\n", (int)(frameSize / (ratio/2.0f)));
-		for (int i = 0; i < frameSize / (ratio/2.0f); i++) {
+        
+		printf("Window (%d samples):\n", (int)frameSize);
+		for (int i = 0; i < frameSize; i++) {
 			printf("%f, ", window[i]);
 		}
 		
@@ -86,7 +87,7 @@ public:
 			printf("%f, ", rampOutBuffer[i]);
 		}
 		printf("\n");
-        */
+        
 	}
 	
 	

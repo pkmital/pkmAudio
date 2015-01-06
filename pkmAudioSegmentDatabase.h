@@ -400,9 +400,10 @@ public:
 //                cout << "pcs:" << endl;
 //                xy_mapping.printAbbrev();
                 xys = normalizedDatabase.GEMM(xy_mapping);
-                xys.setNormalize(false);
-                xys.subtract(0.5f);
-                xys.multiply(3.0f);
+                xys.zNormalizeEachCol();
+//                xys.setNormalize(false);
+//                xys.subtract(0.5f);
+//                xys.multiply(3.0f);
 //                cout << "xys:" << endl;
 //                xys.printAbbrev();
                 bBuiltScreenMapping = true;
@@ -425,9 +426,10 @@ public:
             
             normalizedDatabase = featureDatabase.rowRange(1, featureDatabase.rows, false);
             xys = normalizedDatabase.GEMM(xy_mapping);
-            xys.setNormalize(false);
-            xys.subtract(0.5f);
-            xys.multiply(3.0f);
+            xys.zNormalizeEachCol();
+//            xys.setNormalize(false);
+//            xys.subtract(0.5f);
+//            xys.multiply(3.0f);
             
             bScreenMappingMutex = false;
         }

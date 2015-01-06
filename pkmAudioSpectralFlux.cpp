@@ -175,6 +175,11 @@ void pkmAudioSpectralFlux::setMinSegmentLength(int frames)
     minSegmentLength = MAX(4,frames);
 }
 
+void pkmAudioSpectralFlux::setFrameSize(int fS)
+{
+    frameSize = fS;
+}
+
 float pkmAudioSpectralFlux::getMinSegmentLength()
 {
     return minSegmentLength;

@@ -31,6 +31,7 @@ public:
     void setMinSegmentLength(int frames);
     void setOnsetThreshold(float thresh);
     void setIIRAlpha(float alpha);
+    void setFrameSize(int fS);
     
     pkm::Mat fluxWaveform;
     
