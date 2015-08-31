@@ -29,11 +29,18 @@
 #pragma once
 #include <vector>
 using namespace std;
+
 #include "pkmMatrix.h"
 #include "pkmAudioSegment.h"
 #include "pkmEXTAudioFileReader.h"
+
 #include <Accelerate/Accelerate.h>
+
 #include "ofMain.h"
+
+//#include "ofxPostProcessing.h"
+//#include "ofxDOF.h"
+//#include "ofxDofShader.h"
 
 // recreate without flann, use vector of mat's for featuredatabase, and use dtw for matching
 // could try and do timestretching based on matched path...
@@ -44,6 +51,13 @@ using namespace std;
 #ifdef WITH_FLANN
     #include <flann/flann.h>
 #endif
+
+
+template<typename T>
+T abs_template(T t)
+{
+    return t>0 ? t : -t;
+}
 
 class pkmAudioSegmentDatabase
 {
@@ -58,12 +72,12 @@ public:
 		nnIdx			= (int *)malloc(sizeof(int)*k);						// allocate near neighbor indices
 		dists			= (float *)malloc(sizeof(float)*k);					// allocate near neighbor dists
         
-        font.loadFont("DekarLight.ttf", 14);
+        font.loadFont("FiraSans-Light.ttf", 13);
         
-        bMutex          = false;
-        bScreenMappingMutex = false;
+        bBuildingScreenMapping = false;
         bBuiltScreenMapping = false;
         bSelectingFromMapping = false;
+        
 #ifdef WITH_FLANN
         //query			= (float *)malloc(sizeof(float)*feature_length);	// pre-allocate a query frame
 		flannParams = DEFAULT_FLANN_PARAMETERS;
@@ -72,6 +86,25 @@ public:
                                                 //        flannParams.sample_fraction = 0.25;
         flann_set_distance_type(FLANN_DIST_EUCLIDEAN, 2);
 #endif
+//        post.init(ofGetHeight(), ofGetWidth());
+//        post.setFlip(false);
+////        post.createPass<FxaaPass>()->setEnabled(true);
+////        post.createPass<BloomPass>()->setEnabled(true);
+////        post.createPass<BloomPass>()->setEnabled(true);
+////        post.createPass<BloomPass>()->setEnabled(true);
+//        post.createPass<DofAltPass>()->setEnabled(true);
+//        dof.setup(ofGetHeight(), ofGetWidth());
+//        
+//        ofFbo::Settings settings;
+//        settings.useDepth = true;
+//        settings.depthStencilAsTexture = true;
+//        settings.width = ofGetHeight();
+//        settings.height = ofGetWidth();
+//        settings.textureTarget = GL_TEXTURE_2D;
+//        settings.internalformat = GL_RGBA;
+//        fbo.allocate(settings);
+//        dofshader.setup(ofGetHeight(), ofGetWidth());
+//
         
 	}
 	~pkmAudioSegmentDatabase()
@@ -99,13 +132,15 @@ public:
 		free(dists);
 	}
     
+    void setScaling(float amt)
+    {
+        scaling = amt;
+        font.loadFont("FiraSans-Light.ttf", 13*scaling);
+    }
+    
     void resetDatabase()
     {
-        while(bMutex)
-        {
-            
-        }
-        bMutex = true;
+        bMutex.lock();
         vector<ofPtr<pkmAudioSegment> >::iterator it = audioDatabase.begin();
         while (it != audioDatabase.end()) {
             it->reset();
@@ -120,7 +155,7 @@ public:
         featureDatabase = pkm::Mat();
         bBuiltIndex = false;
         bBuiltScreenMapping = false;
-        bMutex = false;
+        bMutex.unlock();
     }
     
     
@@ -131,7 +166,7 @@ public:
     
     int getSize()
     {
-        return featureDatabase.rows;
+        return std::min<int>(maxObjects,featureDatabase.rows);
     }
 	
 	void setK(int kNeighbors)
@@ -145,14 +180,10 @@ public:
 	
     bool bShouldAddSegment(float *data)
     {
-        while(bMutex)
-        {
-//            cout << "checking SHIT!" << endl;
-        }
-        bMutex = true;
+        bMutex.lock();
         if(!bBuiltIndex)
         {
-            bMutex = false;
+            bMutex.unlock();
             return ~isnan(data[0]) && ~isinf(data[0]);
         }
 #ifdef WITH_FLANN
@@ -164,19 +195,19 @@ public:
 													 k, 
 													 &flannParams) < 0)
 		{
-            bMutex = false;
+            bMutex.unlock();
             return true;
         }
         else if(dists[0] > 0.001)
         {
             //cout << "adding: " << dists[0] << endl;
-            bMutex = false;
+            bMutex.unlock();
             return true;
         }
         else 
         {
 //            printf("[pkmAudioSegmentDatabase]: Too similar to database, not adding: %f\n", dists[0]);
-            bMutex = false;
+            bMutex.unlock();
             return false;
         }
 #else
@@ -203,15 +234,15 @@ public:
                 i++;
             }
             cout << "bestSum: " << bestSum << endl;
-            bMutex = false;
+            bMutex.unlock();
             return ~isinf(bestSum) && ~isnan(bestSum) && bestSum > 0.0010;
         }
         else {
-            bMutex = false;
+            bMutex.unlock();
             return true;
         }
 #endif
-        bMutex = false;
+            bMutex.unlock();
         return false;
     }
     
@@ -221,11 +252,7 @@ public:
         if(!bBuiltIndex)
             return true;
         
-        while(bMutex)
-        {
-            
-        }
-        bMutex = true;
+        bMutex.lock();
         
 #ifdef WITH_FLANN
         if (flann_find_nearest_neighbors_index_float(kdTree, 
@@ -236,18 +263,18 @@ public:
 													 k, 
 													 &flannParams) < 0)
 		{
-            bMutex = false;
+            bMutex.unlock();
             return true;
         }
         else if(dists[0] > 0.001)
         {
-            bMutex = false;
+            bMutex.unlock();
             return true;
         }
         else 
         {
 //            printf("[pkmAudioSegmentDatabase]: Too similar to database, not adding: %f\n", dists[0]);
-            bMutex = false;
+            bMutex.unlock();
             return false;
         }
 #else
@@ -272,24 +299,21 @@ public:
                 i++;
             }
 //            cout << "dist: " << minDist << endl;
-            bMutex = false;
+            bMutex.unlock();
             return ~isinf(minDist) && ~isnan(minDist) && minDist > 0.0010;
         }
         else {
-            bMutex = false;
+            bMutex.unlock();
             return true;
         }
 #endif
-        bMutex = false;
+            bMutex.unlock();
     }
     
     void addAudioSegment(ofPtr<pkmAudioSegment> segment, float *descriptor, int descriptor_size)
     {
-        while(bMutex)
-        {
-//            cout << "adding SHIT!" << endl;
-        }
-        bMutex = true;
+        
+        bMutex.lock();
         
         if (maxObjects > 0 && featureDatabase.rows > maxObjects)
         {
@@ -307,16 +331,13 @@ public:
             featureDatabase.push_back(descriptor, descriptor_size);
         }
         
-        bMutex = false;
+            bMutex.unlock();
     }
     
     void addAudioSequence(ofPtr<pkmAudioSegment> segment, pkm::Mat featureSequence)
     {
-        while(bMutex)
-        {
-            
-        }
-        bMutex = true;
+        
+        bMutex.lock();
         
         audioDatabase.push_back(segment);
         totalSamples += (segment->offset - segment->onset);
@@ -326,17 +347,14 @@ public:
         pkm::Mat lookupTable(featureSequence.rows, 1, currentLookup);
         databaseLookupTable.push_back(lookupTable);
 
-        bMutex = false;
+            bMutex.unlock();
     }
     
 	// rebuild the index after segmenting
 	void buildIndex()
 	{
-        while(bMutex)
-        {
-            
-        }
-        bMutex = true;
+        
+        bMutex.lock();
         
 #ifdef WITH_FLANN
 		if(bBuiltIndex)
@@ -360,21 +378,19 @@ public:
         
 		bBuiltIndex = true;
         
-        bMutex = false;
+        bMutex.unlock();
         
 	}
     
     void buildScreenMapping()
     {
-        if (featureDatabase.rows > 32) {
+        if (featureDatabase.rows > 3) {
             
-            while(bMutex)
-            {
-                
-            }
-            bMutex = true;
+//            std::cout << "building screen mapping: " << getSize() << std::endl;
             
-            normalizedDatabase = featureDatabase.rowRange(1, featureDatabase.rows, false);
+            bMutex.lock();
+            
+            normalizedDatabase = featureDatabase.rowRange(1, getSize(), false);
             pkm::Mat X_t = normalizedDatabase.getTranspose();
 //            cout << "X_t:" << endl;
 //            X_t.printAbbrev();
@@ -382,36 +398,46 @@ public:
 //            covDatabase.subtract(covDatabase.mean(true), covDatabase);
 //            covDatabase.subtract(covDatabase.mean(false), covDatabase);
             
-            pkm::Mat U, S, V_t;
-            if ( covDatabase.svd(U, S, V_t) == 0 )
+            pkm::Mat U, V_t;
+            if ( covDatabase.svd(U, S, V_t) <= 0 )
             {
-                while (bScreenMappingMutex) {
-                    
-                }
-                bScreenMappingMutex = true;
+                bScreenMappingMutex.lock();
 
 //                cout << "U: " << endl;
 //                U.printAbbrev();
 //                cout << "V_t: " << endl;
 //                V_t.printAbbrev();
-                
-                xy_mapping = V_t.colRange(0, 2, true);
+//                S.divideEachVecBySum(true);
+//                V_t.colRange(0,1,false).multiply(S[0]);
+//                V_t.colRange(1,2,false).multiply(S[1]);
+//                V_t.colRange(2,3,false).multiply(S[2]);
+//                V_t.colRange(3,4,false).multiply(S[3]);
+//                V_t.colRange(4,5,false).multiply(S[4]);
+                xy_mapping = V_t.colRange(0, 4, true);
+                if (!bBuiltScreenMapping) {
+                    xy_mapping_interp = xy_mapping;
+                }
 //                xy_mapping.setTranspose();
 //                cout << "pcs:" << endl;
 //                xy_mapping.printAbbrev();
-                xys = normalizedDatabase.GEMM(xy_mapping);
-                xys.zNormalizeEachCol();
+//                xys = normalizedDatabase.GEMM(xy_mapping);
+//                xys.zNormalizeEachCol();
+//                xys.centerEachCol();
+//                xys.divideEachVecByMaxVecElement(false);
+                
 //                xys.setNormalize(false);
-//                xys.subtract(0.5f);
-//                xys.multiply(3.0f);
+
 //                cout << "xys:" << endl;
 //                xys.printAbbrev();
                 bBuiltScreenMapping = true;
                 
-                bScreenMappingMutex = false;
+                bScreenMappingMutex.unlock();
+                bMutex.unlock();
             }
-            
-            bMutex = false;
+            else {
+                bMutex.unlock();
+                resetDatabase();
+            }
         }
     }
     
@@ -419,80 +445,179 @@ public:
     {
         if(bBuiltScreenMapping) {
             
-            while (bScreenMappingMutex) {
-                
+            bScreenMappingMutex.lock();
+            
+            float alpha = 0.95;
+            
+            if(xy_mapping_interp.size() != xy_mapping.size())
+                xy_mapping_interp.resize(xy_mapping.rows, xy_mapping.cols);
+            
+            xy_mapping_interp = xy_mapping_interp * alpha + xy_mapping * (1.0 - alpha);
+            
+//            std::cout << "updating screen mapping: " << getSize() << std::endl;
+            
+            xys_update = featureDatabase.rowRange(1, getSize(), false).GEMM(xy_mapping_interp);
+//            xys = xys_update;
+            
+            // center
+            pkm::Mat means = xys_update.mean(true);
+            if(means_interp.size())
+                means_interp = (means * (1.0 - alpha) + means_interp * alpha);
+            else
+                means_interp = means;
+            
+            xys = pkm::Mat(xys_update.rows, xys_update.cols);
+            xys_mouse = pkm::Mat(xys_update.rows, 2);
+            
+            for (int c = 0; c < xys.cols; c++) {
+                float m = means_interp.data[c] * -1.0;
+                if (isnan(m) || isinf(m)) {
+                    m = 0.0;
+                }
+                vDSP_vsadd(&(xys_update.data[c]), xys.cols, &m, &(xys.data[c]), xys.cols, xys.rows);
             }
-            bScreenMappingMutex = true;
             
-            normalizedDatabase = featureDatabase.rowRange(1, featureDatabase.rows, false);
-            xys = normalizedDatabase.GEMM(xy_mapping);
-            xys.zNormalizeEachCol();
-//            xys.setNormalize(false);
-//            xys.subtract(0.5f);
-//            xys.multiply(3.0f);
+            // divide by max
+            pkm::Mat maxs = pkm::Mat::abs(xys).max(false);
+            if(means_interp.size())
+                maxs_interp = maxs * (1.0 - alpha) + maxs_interp * alpha;
+            else
+                maxs_interp = maxs;
             
-            bScreenMappingMutex = false;
+            for (int c = 0; c < xys.cols; c++) {
+                float m = maxs_interp.data[c];//std::min<float>(0.75, std::max<float>(fabs(maxs_interp.data[c]), 0.000001));
+                if (isnan(m) || isinf(m)) {
+                    m = 1.0;
+                }
+                vDSP_vsdiv(&(xys.data[c]), xys.cols, &m, &(xys.data[c]), xys.cols, xys.rows);
+            }
+            
+            
+//            xys.print();
+            
+            bScreenMappingMutex.unlock();
         }
     }
     
-    void drawDatabase(int width, int height, float radius = 5.0f)
+    void setOrientation(ofPoint orientation)
     {
+        this->orientation = orientation;
+    }
+    
+    void drawDatabase(int width, int height, float radius = 5.0f, float audio_rate = 86.0f, float sample_rate = 44100.0f)
+    {
+        radius *= scaling;
         if(bBuiltScreenMapping) {
             
-            while (bScreenMappingMutex) {
-                
-            }
-            bScreenMappingMutex = true;
+            bMutex.lock();
+            bScreenMappingMutex.lock();
             
-            ofPushStyle();
-            ofEnableAntiAliasing();
-            ofEnableSmoothing();
-            glEnable(GL_LINE_SMOOTH);
+            ofSetLineWidth(2.0 * scaling);
+//            ofEnableAntiAliasing();
+//            ofEnableSmoothing();
             ofPushMatrix();
             ofFill();
-            ofTranslate(width / 2.0, height / 2.0);
-            ofScale(0.5, 0.5);
-            ofBeginShape();
             
-            int prev_x = 0;
-            int prev_y = 0;
+//            ofEnableDepthTest();
+//            post.begin();
+//            dof.reloadShader();
+//            dof.setFocalRange(500.0f);
+//            dof.setFocalDistance(100.0f);
+//            dof.begin();
             
-            for (int row_i = 0; row_i < xys.rows; row_i++) {
-                float x = xys.row(row_i)[0] * width / 2.0;
-                float y = xys.row(row_i)[1] * height / 2.0;
+//            glEnable(GL_DEPTH_TEST);
+//            glEnable(GL_CULL_FACE);
+            
+//            fbo.begin();
+//            ofEnableDepthTest();
+//            ofBackground(0);
+            
+
+            
+            
+            float prev_x = -1;
+            ofVec3f prev_v;
+            for (int row_i = 0; row_i < std::min<int>(maxObjects, audioDatabase.size())-1; row_i++) {
+                float x = (xys.row(row_i)[0] * (width / 2.5));
+                float y = (xys.row(row_i)[1] * (height / 2.5));
+                float z = xys.row(row_i)[2] * 100.0;
+                float z2 = 0.0;//xys.row(row_i)[3];
+                float z3 = 0.0;//xys.row(row_i)[4];
+                
+                ofVec3f v(x, y, z);
+                v.rotate(orientation.x, orientation.y, orientation.z);
+                
+                v.x += (width / 2.0);
+                v.y += (height / 2.0);
+                
+                xys_mouse.row(row_i)[0] = v.x;
+                xys_mouse.row(row_i)[1] = v.y;
+
+
+                ofSetColor(std::max<float>(0.0, std::min<float>(220, 120 + z)), std::min<float>(200, 120 + 100.0*z2), std::min<float>(200, 120 + 100.0*z3), 220.0);
+                
                 if (audioDatabase[row_i+1]->bPlaying) {
-                    if (prev_x && prev_y) {
-                        ofSetColor(140, 180, 140);
-                        ofLine(prev_x, prev_y, x, y);
+//                    ofSetColor(140, 180, 140, 200.0);
+                    float this_radius = radius + radius * (audioDatabase[row_i+1]->index) / (float)audioDatabase[row_i+1]->offset * (audioDatabase[row_i+1]->offset / sample_rate);
+                    ofCircle(v, this_radius);
+//                    this_radius *= 2.0;
+//                    circle_img.draw(x - this_radius / 2, y - this_radius / 2, this_radius, this_radius);
+                    if (prev_x != -1) {
+                        ofLine(v, prev_v);
                     }
-                    prev_x = x;
-                    prev_y = y;
                     
-                    ofSetColor(200, 240, 200);
-                    ofCircle(x, y, radius + ((rand() % 100) - 50) / 20.0);
+                    ofNoFill();
+                    this_radius = radius + radius * (audioDatabase[row_i+1]->offset / sample_rate);
+                    ofSetColor(255, 220.0);
+                    ofCircle(v, this_radius);
+                    ofFill();
+                    
+                    prev_x = x;
+                    prev_v = v;
                 }
                 else {
-                    ofSetColor(220, 220, 220);
-                    
-                    ofCircle(x, y, radius);
+                    float this_radius = radius + radius * (audioDatabase[row_i+1]->offset / sample_rate);
+                    ofCircle(v, this_radius);
+//                    this_radius *= 2.0;
+//                    circle_img.draw(x - this_radius / 2, y - this_radius / 2, this_radius, this_radius);
                 }
                 
-//                ofRect(x, y, radius, radius);
-                font.drawString(ofToString(row_i), x, y);
             }
-            ofSetColor(140, 180, 140);
-            ofPopMatrix();
-            ofPopStyle();
             
-            bScreenMappingMutex = false;
+//            ofDisableDepthTest();
+//            fbo.end();
+//            dofshader.render(fbo);
+            
+//            fbo.getDepthTexture().draw(ofGetWidth()*.75, ofGetHeight()*.75, ofGetWidth()*.25, ofGetHeight()*.25);
+            
+//            glDisable(GL_CULL_FACE);
+            
+//            post.end(true);
+//            dof.end();
+////
+//            dof.getFbo().draw(0, 0, 400, 400);
+//            ofDisableDepthTest();
+
+//            post.getRawRef().getDepthTexture().draw(0, 0, width, height);
+            
+            ofSetLineWidth(1.0);
+            ofSetColor(255);
+            ofFill();
+            
+
+            ofPopMatrix();
+//            ofPopStyle();
+            
+            bMutex.unlock();
+            bScreenMappingMutex.unlock();
         }
         else {
-            string str="Learn more sounds before \n  using interactive mode";
-            font.drawString(str, width / 2 - font.stringWidth(str) / 2.0, height / 2);
+            string str="Memories displayed here after learning more sounds";
+            font.drawString(str, width / 2 - font.stringWidth(str) / 2.0, height / 1.25);
         }
     }
-    
-    vector<ofPtr<pkmAudioSegment> > selectFromDatabase(float x, float y, int width, int height)
+    // implement unselect from database
+    vector<ofPtr<pkmAudioSegment> > selectFromDatabase(float x1, float y1, int width, int height)
     {
         
         vector<ofPtr<pkmAudioSegment> > nearestAudioSegments;
@@ -505,10 +630,8 @@ public:
             }
             bSelectingFromMapping = true;
             
-//            while (bScreenMappingMutex) {
-//                
-//            }
-//            bScreenMappingMutex = true;
+            
+            bScreenMappingMutex.lock();
             
             float sum = 0;
             
@@ -517,15 +640,95 @@ public:
                 dists[m] = HUGE_VALF;
             }
             
-            x -= (width / 2.0);
-            y -= (height / 2.0);
+//            x -= (width / 2.0);
+//            y -= (height / 2.0);
+//            
+//            x /= (width / 2.5);
+//            y /= (height / 2.5);
             
-            x /= (width / 4.0);
-            y /= (height / 4.0);
+//            ofVec3f v(x, y, 0);
+//            v.rotate(orientation.z, orientation.y, orientation.x);
             
-            for (int row_i = 0; row_i < xys.rows; row_i++) {
-                float this_x = xys.row(row_i)[0];
-                float this_y = xys.row(row_i)[1];
+            
+            for (int row_i = 0; row_i < std::min<int>(maxObjects,xys_mouse.rows); row_i++) {
+                float x2 = xys_mouse.row(row_i)[0];
+                float y2 = xys_mouse.row(row_i)[1];
+                
+                sum = abs_template<float>(x1 - x2) + abs_template<float>(y1 - y2);
+                
+                int n = row_i + 1;
+                for (int m = 0; m < k; m++) {
+                    if (sum < dists[m]) {
+                        float temp = dists[m];
+                        dists[m] = sum;
+                        sum = temp;
+                        
+                        int temp2 = nnIdx[m];
+                        nnIdx[m]= n;
+                        n = temp2;
+                    }
+                }
+            }
+
+            
+            bScreenMappingMutex.unlock();
+            
+            bMutex.lock();
+//            cout << "size: " << audioDatabase.size() << endl;
+            for (int i = 0; i < k; i++)
+            {
+                if (nnIdx[i] < audioDatabase.size()) {
+                    //printf("i-th idx: %d, dist: %f\n", nnIdx[i], dists[i]);
+                    ofPtr<pkmAudioSegment> p = (audioDatabase[nnIdx[i]]);
+                    
+                    if (p != NULL && !p->bPlaying) {
+//                        cout << i << endl;
+                        p->frame = 0;
+                        p->index = 0;
+                        p->bPlaying = true;
+                        nearestAudioSegments.push_back(p);
+                    }
+                }
+            }
+            
+            bMutex.unlock();
+        }
+        
+        bSelectingFromMapping = false;
+        return nearestAudioSegments;
+    }
+    
+    
+    void unSelectFromDatabase(float x, float y, int width, int height)
+    {
+        //        int k = 1;
+        
+        if(bBuiltScreenMapping)
+        {
+            if (bSelectingFromMapping) {
+                return;
+            }
+            bSelectingFromMapping = true;
+            
+            
+            bScreenMappingMutex.lock();
+            
+            float sum = 0;
+            
+            for (int m = 0; m < k; m++) {
+                nnIdx[m] = 0;
+                dists[m] = HUGE_VALF;
+            }
+            
+//            x -= (width / 2.0);
+//            y -= (height / 2.0);
+//            
+//            x /= (width / 4.0);
+//            y /= (height / 4.0);
+            
+            for (int row_i = 0; row_i < std::min<int>(maxObjects,xys_mouse.rows); row_i++) {
+                float this_x = xys_mouse.row(row_i)[0];
+                float this_y = xys_mouse.row(row_i)[1];
                 
                 sum = ofDist(this_x, this_y, x, y);
                 
@@ -542,43 +745,36 @@ public:
                     }
                 }
             }
-//            bScreenMappingMutex = false;
             
-            while (bMutex) {
-                
-            }
-            bMutex = true;
-//            cout << "size: " << audioDatabase.size() << endl;
+            bScreenMappingMutex.unlock();
+            
+            
+            bMutex.lock();
+            //            cout << "size: " << audioDatabase.size() << endl;
             for (int i = 0; i < k; i++)
             {
                 if (nnIdx[i] < audioDatabase.size()) {
                     //printf("i-th idx: %d, dist: %f\n", nnIdx[i], dists[i]);
                     ofPtr<pkmAudioSegment> p = (audioDatabase[nnIdx[i]]);
                     
-                    if (p != NULL) {
-//                        cout << i << endl;
-                        p->frame = 0;
-                        p->bPlaying = true;
-                        nearestAudioSegments.push_back(p);
+                    if (p != NULL && p->bPlaying) {
+                        p->bNeedsReset = true;
                     }
                 }
             }
             
-            bMutex = false;
+            bMutex.unlock();
         }
         
         bSelectingFromMapping = false;
-        return nearestAudioSegments;
+        return;
     }
     
 //
 	vector<ofPtr<pkmAudioSegment> > getNearestAudioSegments(ofPtr<pkmAudioSegment> segment)
 	{
-        while(bMutex)
-        {
-            
-        }
-        bMutex = true;
+        
+        bMutex.lock();
         
 		vector<ofPtr<pkmAudioSegment> > nearestAudioSegments;
 		int i;
@@ -596,7 +792,8 @@ public:
 													 &flannParams) < 0)
 		{
 			printf("[ERROR] No frames found for Nearest Neighbor Search!\n");
-            bMutex = false;
+            
+            bMutex.unlock();
 			return nearestAudioSegments;
 		}
 #else
@@ -608,7 +805,7 @@ public:
         
         i = 0;
         float *testData = segment->descriptor.data;
-        while(i < featureDatabase.rows) {
+        while(i < std::min<int>(maxObjects,featureDatabase.rows)) {
             float *curData = featureDatabase.row(i);
             float sum = 0;
             int j = 0;
@@ -646,6 +843,7 @@ public:
 
                 if (!p->bPlaying) {
                     p->frame = 0;
+                    p->index = 0;
                     p->bPlaying = true;
                     nearestAudioSegments.push_back(p);
                 }
@@ -658,8 +856,7 @@ public:
             
 		}
         
-        bMutex = false;
-        
+        bMutex.unlock();
 		return nearestAudioSegments;
 	}
     
@@ -667,17 +864,15 @@ public:
     
     vector<ofPtr<pkmAudioSegment> > getNearestAudioSegments(float *descriptor)
 	{
-        while(bMutex)
-        {
-            
-        }
-        bMutex = true;
+        
+        bMutex.lock();
         
 		vector<ofPtr<pkmAudioSegment> > nearestAudioSegments;
 		int i;
 		if (!bBuiltIndex) {
 			//printf("[ERROR] First build the index with buildIndex()");
-            bMutex = false;
+            
+            bMutex.unlock();
 			return nearestAudioSegments;
 		}
 #ifdef WITH_FLANN
@@ -690,7 +885,8 @@ public:
 													 &flannParams) < 0)
 		{
 			printf("[ERROR] No frames found for Nearest Neighbor Search!\n");
-            bMutex = false;
+            
+            bMutex.unlock();
 			return nearestAudioSegments;
 		}
 #else
@@ -701,7 +897,7 @@ public:
         
         i = 0;
         float *testData = descriptor;
-        while(i < featureDatabase.rows) {
+        while(i < std::min<int>(maxObjects,featureDatabase.rows)) {
             float sum = 0;
             int j = 0;
             while (j < featureDatabase.cols) {
@@ -729,7 +925,6 @@ public:
         }
         
 #endif
-        bMutex = false;
 		
 		float sumDists = 0;
 		i = 0;
@@ -744,6 +939,7 @@ public:
 //                printf("K: %d, i-th idx: %d, dist: %f\n", i, nnIdx[i], dists[i]);
                 ofPtr<pkmAudioSegment> p = (audioDatabase[nnIdx[i]]);
                 if (!p->bPlaying) {
+                    p->index = 0;
                     p->frame = 0;
                     p->bPlaying = true;
                     nearestAudioSegments.push_back(p);
@@ -753,22 +949,21 @@ public:
                 //}
             }
         }
+        bMutex.unlock();
 		return nearestAudioSegments;
 	}
     
     vector<ofPtr<pkmAudioSegment> > getNearestAudioSequences(pkm::Mat featureSequence)
     {
-        while(bMutex)
-        {
-//            cout << "getting SHIT!" << endl;
-        }
-        bMutex = true;
+        
+        bMutex.lock();
         
         vector<ofPtr<pkmAudioSegment> > nearestAudioSegments;
         int i;
         if (!bBuiltIndex) {
             //printf("[ERROR] First build the index with buildIndex()");
-            bMutex = false;
+            
+            bMutex.unlock();
             return nearestAudioSegments;
         }
 #ifdef WITH_FLANN
@@ -781,7 +976,8 @@ public:
                                                      &flannParams) < 0)
         {
             printf("[ERROR] No frames found for Nearest Neighbor Search!\n");
-            bMutex = false;
+            
+            bMutex.unlock();
             return nearestAudioSegments;
         }
         
@@ -840,6 +1036,7 @@ public:
                 ofPtr<pkmAudioSegment> p = (audioDatabase[nnIdx[i]]);
                 if (!p->bPlaying) {
                     p->frame = 0;
+                    p->index = 0;
                     p->bPlaying = true;
                     nearestAudioSegments.push_back(p);
                 }
@@ -848,7 +1045,7 @@ public:
                 //}
             }
         }
-        bMutex = false;
+        bMutex.unlock();
         return nearestAudioSegments;
     }
     
@@ -887,6 +1084,8 @@ public:
 	
     void save()
     {
+        bMutex.lock();
+        
         featureDatabase.save(ofToDataPath("audio_database.mat"));
         databaseLookupTable.save(ofToDataPath("audio_table.mat"));
         FILE *fp;
@@ -910,10 +1109,13 @@ public:
         }
         fclose(fp2);
         
+        bMutex.unlock();
     }
     
     void load(bool bLoadBuffer = false)
     {
+        bMutex.lock();
+        
         featureDatabase.load(ofToDataPath("audio_database.mat"));
         databaseLookupTable.load(ofToDataPath("audio_table.mat"));
         FILE *fp;
@@ -960,6 +1162,8 @@ public:
         
         
         databaseMatches = pkm::Mat(1, featureDatabase.rows, true);
+        
+        bMutex.unlock();
         //databaseMatches = pkm::Mat(featureDatabase.rows+1, featureDatabase.cols, true);
     }
 	
@@ -974,10 +1178,13 @@ public:
 	// For kNN - using C-version of FlANN
 	pkm::Mat							featureDatabase;
     pkm::Mat                            normalizedDatabase;
-    pkm::Mat                            xy_mapping;
-    pkm::Mat                            xys;
+    pkm::Mat                            xy_mapping, xy_mapping_interp, means_interp, maxs_interp;
+    pkm::Mat                            xys_update, xys, xys_mouse;
+    pkm::Mat                            S;
     pkm::Mat                            databaseMatches;
     pkm::Mat                            databaseLookupTable;
+    
+    ofPoint                             orientation;
     
     ofTrueTypeFont                      font;
     
@@ -997,8 +1204,16 @@ public:
 	int									numFeatures,	// dimension of each point
                                         numFrames;		// number of feature point frames
     
-	bool								bBuiltIndex, bMutex, bScreenMappingMutex, bBuiltScreenMapping, bSelectingFromMapping;
+	bool								bBuiltIndex, bBuiltScreenMapping, bSelectingFromMapping, bBuildingScreenMapping;
     
+    std::mutex                          bMutex, bScreenMappingMutex;
+    
+    float                               scaling;
+    
+//    ofxPostProcessing                   post;
+//    ofxDOF                              dof;
+//    ofxDofShader                        dofshader;
+    ofFbo                               fbo;
     
     void sequenceMatch(
                        float* V, /* current input sequence */

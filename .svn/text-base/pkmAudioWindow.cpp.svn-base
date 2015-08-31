@@ -30,8 +30,9 @@
 #include "pkmAudioWindow.h"
 
 
+int pkmAudioWindow::frameSize;
 int pkmAudioWindow::rampInLength;
 int pkmAudioWindow::rampOutLength;
-pkm::Mat pkmAudioWindow::rampInBuffer;
-pkm::Mat pkmAudioWindow::rampOutBuffer;
-pkm::Mat pkmAudioWindow::window;
+float * pkmAudioWindow::rampInBuffer;
+float * pkmAudioWindow::rampOutBuffer;
+float * pkmAudioWindow::window;

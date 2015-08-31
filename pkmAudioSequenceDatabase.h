@@ -29,13 +29,13 @@ public:
         
     }
     
-    void addSequence(ofPtr<pkmAudioSegment> & audioSequence, Mat audioFeature)
+    void addSequence(shared_ptr<pkmAudioSegment> & audioSequence, Mat audioFeature)
     {
         audioSequences.push_back(audioSequence);
         database.addToDatabase(audioFeature);
     }
     
-    pkmAudioSegment getNearestSequence(Mat audioFeature, vector<int> &pathi, vector<int> &pathj)
+    shared_ptr<pkmAudioSegment> getNearestSequence(const Mat &audioFeature, vector<int> &pathi, vector<int> &pathj)
     {
         int location;
         float distance;
@@ -47,10 +47,10 @@ public:
         else {
             audioSequences[location]->audio_rate = 1.0;
         }
-        return *audioSequences[location];
+        return audioSequences[location];
     }
     
-    ofPtr<pkmAudioSegment> getNearestSequence(Mat audioFeature)
+    shared_ptr<pkmAudioSegment> getNearestSequence(const Mat &audioFeature)
     {
         int location;
         vector<int> pathi, pathj;
@@ -67,9 +67,9 @@ public:
         return audioSequences[location];
     }
     
-    vector<ofPtr<pkmAudioSegment> > getNearestSequences(Mat &audioFeature)
+    vector<shared_ptr<pkmAudioSegment> > getNearestSequences(Mat &audioFeature)
     {
-        vector<ofPtr<pkmAudioSegment> > nearestSequences;
+        vector<shared_ptr<pkmAudioSegment> > nearestSequences;
         
         nearestSequences.push_back(getNearestSequence(audioFeature));
         
@@ -77,9 +77,9 @@ public:
     }
     
     
-    vector<ofPtr<pkmAudioSegment> > getNearestSequences(float *audioFeature, int numFeatures)
+    vector<shared_ptr<pkmAudioSegment> > getNearestSequences(float *audioFeature, int numFeatures)
     {
-        vector<ofPtr<pkmAudioSegment> > nearestSequences;
+        vector<shared_ptr<pkmAudioSegment> > nearestSequences;
         int location;
         vector<int> pathi, pathj;
         float distance;
@@ -110,7 +110,7 @@ public:
         fp = fopen(ofToDataPath("audio_database.txt").c_str(), "w");
         fprintf(fp, "%ld\n", audioSequences.size());
         printf("[OK] Saving %lu segments\n", audioSequences.size());
-        for(vector<ofPtr<pkmAudioSegment> >::iterator it = audioSequences.begin();
+        for(vector<shared_ptr<pkmAudioSegment> >::iterator it = audioSequences.begin();
             it != audioSequences.end();
             it++)
         {
@@ -140,7 +140,7 @@ public:
             unsigned long onset, offset, index;
             vector<float> desc;
             fscanf(fp, "%s %ld %ld %ld\n", buf, &onset, &offset, &index);
-            ofPtr<pkmAudioSegment> p(new pkmAudioSegment(buf, onset, offset, desc, index, 0));
+            shared_ptr<pkmAudioSegment> p(new pkmAudioSegment(buf, onset, offset, desc, index, 0));
             if (bLoadBuffer) {
                 pkmEXTAudioFileReader audioFile;
                 if(audioFile.open(ofToDataPath(buf)))
@@ -164,7 +164,7 @@ public:
     
     
 private:
-    vector<ofPtr<pkmAudioSegment> >     audioSequences;
+    vector<shared_ptr<pkmAudioSegment> >     audioSequences;
 #ifdef USE_GVF
     pkmGVF                              database;
 #else

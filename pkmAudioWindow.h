@@ -30,6 +30,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <Accelerate/Accelerate.h>
+#include "pkmMatrix.h"
+
 class pkmAudioWindow
 {
 public:
@@ -42,22 +44,24 @@ public:
 		
 	}
 	
-	static void initializeWindow(int fS = 512)
+	static void initializeWindow(int ramp_length = 128)
 	{
 		int ratio = 1;
-		frameSize = 256;
-		rampInLength = 128;
-		rampOutLength = 128;
-		window = (float *)malloc(sizeof(float) * frameSize);
-		rampInBuffer = (float *)malloc(sizeof(float) * rampInLength);
-		rampOutBuffer = (float *)malloc(sizeof(float) * rampOutLength);
+        
+		rampInLength = ramp_length;
+		rampOutLength = ramp_length;
+        
+        ramp_length = ramp_length * 2 + 1;
+        
+        window = pkm::Mat(1, ramp_length);
+        rampInBuffer = pkm::Mat(1, rampInLength);
+        rampOutBuffer = pkm::Mat(1, rampOutLength);
 		
-		vDSP_hann_window(window, frameSize, vDSP_HANN_DENORM);
-		//float scalar = 2.0f;
-		//vDSP_vsmul(window, 1, &scalar, window, 1, frameSize*2);
-		cblas_scopy(rampInLength, window, 1, rampInBuffer, 1);
-        int window_offset = frameSize - rampOutLength;
-		cblas_scopy(rampOutLength, window + window_offset, 1, rampOutBuffer, 1);
+		vDSP_hann_window(window.data, ramp_length, vDSP_HANN_DENORM);
+		
+        cblas_scopy(rampInLength, window.data, 1, rampInBuffer.data, 1);
+        int window_offset = ramp_length - rampOutLength;
+		cblas_scopy(rampOutLength, window.data + window_offset, 1, rampOutBuffer.data, 1);
 		
 //		for (int i = frameSize/ratio; i < frameSize; i++) {
 //			rampInBuffer[i] = 1.0f;
@@ -66,40 +70,25 @@ public:
 //		for (int i = 0; i < frameSize*(ratio-1)/ratio; i++) {
 //			rampOutBuffer[i] = 1.0f;
 //		}
+
+//        for(int i = 0; i < rampInLength; i++)
+//        {
+//            std::cout << rampInBuffer[i] << ", " << rampOutBuffer[i] << std::endl;
+//        }
 		
 		
 		rampInBuffer[0] = 0.0f;
 		rampOutBuffer[rampOutLength-1] = 0.0f;
 		
-        
-		printf("Window (%d samples):\n", (int)frameSize);
-		for (int i = 0; i < frameSize; i++) {
-			printf("%f, ", window[i]);
-		}
-		
-		printf("rampInBuffer (%d samples):\n", rampInLength);
-		for (int i = 0; i < rampInLength; i++) {
-			printf("%f, ", rampInBuffer[i]);
-		}
-		
-		printf("rampOutBuffer (%d samples):\n", rampOutLength);
-		for (int i = 0; i < rampOutLength; i++) {
-			printf("%f, ", rampOutBuffer[i]);
-		}
-		printf("\n");
-        
 	}
 	
 	
 	static void deallocate()
 	{
-		free(window);
-		free(rampInBuffer);
-		free(rampOutBuffer);
 		
 	}
 	
 	// Attack Envelope using ramps
-	static int frameSize, rampInLength, rampOutLength;
-	static float *rampInBuffer, *rampOutBuffer, *window;
+	static int rampInLength, rampOutLength;
+    static pkm::Mat rampInBuffer, rampOutBuffer, window;
 };

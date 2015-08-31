@@ -12,7 +12,6 @@
 #include "pkmAudioSegment.h"
 #include "pkmMatrix.h"
 #include "maximilian.h"
-#include "maxiGrains.h"
 #include "pkmAudioWindow.h"
 #include "ofMain.h"
 
@@ -38,6 +37,7 @@ public:
         
     }
     
+    /*
     static void constantWarp(pkmAudioSegment &sourceSegment, 
                              float fixedSpeed, 
                              unsigned long targetLength,
@@ -62,9 +62,9 @@ public:
         vDSP_vmul(warpedAudio.data, 1, pkmAudioWindow::rampInBuffer, 1, warpedAudio.data, 1, pkmAudioWindow::rampInLength);
         vDSP_vmul(warpedAudio.data + targetLength - pkmAudioWindow::rampOutLength, 1, pkmAudioWindow::rampOutBuffer, 1, warpedAudio.data + targetLength - pkmAudioWindow::rampOutLength, 1, pkmAudioWindow::rampOutLength);
     }
-    
+    */
         
-    static pkm::Mat dynamicWarp(pkmAudioSegment sourceSegment, 
+    static pkm::Mat dynamicWarp(shared_ptr<pkmAudioSegment> sourceSegment,
                                 vector<int> sourcePath, 
                                 vector<int> targetPath, 
                                 unsigned int targetFrames,
@@ -168,7 +168,7 @@ public:
         
 #ifdef USE_DIRAC
             maxiSample s;
-            s.load(ofToDataPath(sourceSegment.filename));
+            s.load(ofToDataPath(sourceSegment->filename));
             
             //void *dirac = DiracCreateInterleaved(kDiracLambdaPreview, kDiracQualityPreview, 1, 44100, &diracReadSample, (void *)&s);
             void *dirac = DiracCreateInterleaved(kDiracLambda3, kDiracQualityBest, 1, 44100, &diracReadSample, (void *)&s);
@@ -196,7 +196,7 @@ public:
             
             // warp audio using calculated speed for each audio frame
             maxiSample s;
-            s.load(ofToDataPath(sourceSegment.filename));
+            s.load(ofToDataPath(sourceSegment->filename));
             maxiTimestretch<hannWinFunctor> ts(&s);
             float *ptr = warpedAudio.data;
             int overlaps = 4;
@@ -209,8 +209,8 @@ public:
 #endif
             
             // window
-            vDSP_vmul(warpedAudio.data, 1, pkmAudioWindow::rampInBuffer, 1, warpedAudio.data, 1, pkmAudioWindow::rampInLength);
-            vDSP_vmul(warpedAudio.data + targetLength - pkmAudioWindow::rampOutLength, 1, pkmAudioWindow::rampOutBuffer, 1, warpedAudio.data + targetLength - pkmAudioWindow::rampOutLength, 1, pkmAudioWindow::rampOutLength);
+            vDSP_vmul(warpedAudio.data, 1, pkmAudioWindow::rampInBuffer.data, 1, warpedAudio.data, 1, pkmAudioWindow::rampInLength);
+            vDSP_vmul(warpedAudio.data + targetLength - pkmAudioWindow::rampOutLength, 1, pkmAudioWindow::rampOutBuffer.data, 1, warpedAudio.data + targetLength - pkmAudioWindow::rampOutLength, 1, pkmAudioWindow::rampOutLength);
         }
         
         return warpedAudio;

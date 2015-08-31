@@ -83,17 +83,14 @@
 
 #include "pkmAudioSegmenter.h"
 
-pkmAudioSegmenter::pkmAudioSegmenter(int frameSize, int fftSize)
+pkmAudioSegmenter::pkmAudioSegmenter(int frameSize)
 {
-    NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS = SAMPLE_RATE*0.5/frameSize;
-    NUM_FORE_BUFFERS_FOR_FEATURE_ANALYSIS = SAMPLE_RATE*0.5/frameSize;
-    NUM_BUFFERS_FOR_SEGMENTATION_ANALYSIS = SAMPLE_RATE*0.5/frameSize;
+    NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS = SAMPLE_RATE*1/frameSize;
+    NUM_FORE_BUFFERS_FOR_FEATURE_ANALYSIS = SAMPLE_RATE*1/frameSize;
+    NUM_BUFFERS_FOR_SEGMENTATION_ANALYSIS = SAMPLE_RATE*3/frameSize;
     
-    ringBuffer                  = new pkmCircularRecorder(fftSize, frameSize);
-    alignedBuffer               = (float *)malloc(sizeof(float)*fftSize);
-    
-    audioFeature				= new pkmAudioFeatures(SAMPLE_RATE, fftSize);
-    numLFCCs					= audioFeature->getNumCoefficients();
+    audioFeature				= new pkmAudioFeatures(SAMPLE_RATE, frameSize);
+    numLFCCs					= 64;//audioFeature->getNumCoefficients();
     current_feature             = pkm::Mat(1, numLFCCs);				//= (float *)malloc(sizeof(float) * numLFCCs);
     
     feature_background_buffer	= pkm::Mat();//pkm::Mat(NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS, numLFCCs);
@@ -106,11 +103,8 @@ pkmAudioSegmenter::pkmAudioSegmenter(int frameSize, int fftSize)
     bSegmenting					= false;
     bSegmented					= false;
     bDraw						= false;
-    
-    MIN_SEGMENT_LENGTH          = SAMPLE_RATE / 8.0;
-    maxNumFrames                = MAX_SEGMENT_LENGTH / frameSize;
 	
-	SEGMENT_THRESHOLD			= 3.0f;
+	SEGMENT_THRESHOLD			= 2.0f;
     
     // recorded segment
     audioSegment				= pkm::Mat();
@@ -119,8 +113,6 @@ pkmAudioSegmenter::pkmAudioSegmenter(int frameSize, int fftSize)
 
 pkmAudioSegmenter::~pkmAudioSegmenter()
 {
-    delete ringBuffer;
-    free(alignedBuffer);
     delete audioFeature;
 }
 
@@ -149,7 +141,7 @@ bool pkmAudioSegmenter::detectedOnset()
         
         // get the distance from the current frame and the previous N frame's average 
         // (note this can be any metric)
-        distance = 
+        float distance = 
         distanceMetric(feature_background_average.data, 
                        &current_feature[0], 
                        feature_background_average.cols);
@@ -158,8 +150,8 @@ bool pkmAudioSegmenter::detectedOnset()
         background_distance_buffer.insertRowCircularly(&distance);
         
         // calculate the mean and deviation for analysis
-        mean_distance = pkm::Mat::mean(background_distance_buffer.data, background_distance_buffer.rows);
-        std_distance = sqrtf(fabs(pkm::Mat::var(background_distance_buffer.data, background_distance_buffer.rows)));
+        float mean_distance = pkm::Mat::mean(background_distance_buffer.data, background_distance_buffer.rows);
+        float std_distance = sqrtf(fabs(pkm::Mat::var(background_distance_buffer.data, background_distance_buffer.rows)));		
         
         //printf("distance: %f, mean_distance: %f, std_distance: %f\n", distance, mean_distance, std_distance);
         // if it is an outlier, then we have detected an event
@@ -179,7 +171,7 @@ bool pkmAudioSegmenter::detectedOnset()
     }
 
 }
-/*
+
 bool pkmAudioSegmenter::update() 
 {
     bStartedSegment = false;
@@ -190,15 +182,10 @@ bool pkmAudioSegmenter::update()
         
         // get the distance from the current frame and the previous N frame's average 
         // (note this can be any metric)
-        distance = 
+        float distance = 
         distanceMetric(feature_background_average.data, 
                        &current_feature[0], 
                        feature_background_average.cols);
-        
-        
-        // calculate the mean and deviation for analysis
-        mean_distance = pkm::Mat::mean(background_distance_buffer.data, background_distance_buffer.rows);
-        std_distance = sqrtf(fabs(pkm::Mat::var(background_distance_buffer.data, background_distance_buffer.rows)));		
         
         // if we aren't segmenting, add the current distance to the previous M distances buffer
         if (!bSegmenting) {
@@ -207,11 +194,15 @@ bool pkmAudioSegmenter::update()
             
         }
         
+        // calculate the mean and deviation for analysis
+        float mean_distance = pkm::Mat::mean(background_distance_buffer.data, background_distance_buffer.rows);
+        float std_distance = sqrtf(fabs(pkm::Mat::var(background_distance_buffer.data, background_distance_buffer.rows)));		
+        
         //printf("distance: %f, mean_distance: %f, std_distance: %f\n", distance, mean_distance, std_distance);
         
         // if it is an outlier, then we have detected an event
         if (!bSegmenting && 
-            (fabs(distance - mean_distance) > SEGMENT_THRESHOLD*std_distance) )
+            (fabs(distance - mean_distance) - SEGMENT_THRESHOLD*std_distance) > 0)
         {
             bSegmenting = true;
             bStartedSegment = true;
@@ -226,7 +217,7 @@ bool pkmAudioSegmenter::update()
                 (audioSegment.rows * audioSegment.cols) > MIN_SEGMENT_LENGTH)
         {
             // too similar to the original background, no more event
-            if( (fabs(distance - mean_distance) < 0.05f*std_distance) )
+            if( (fabs(distance - mean_distance) - 0.3f*std_distance) < 0 )
             {
                 bSegmenting = false;
                 bSegmented = true;
@@ -275,7 +266,7 @@ bool pkmAudioSegmenter::update()
         feature_background_average = feature_background_buffer.sum() / (float)NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS;
         
         // get the distance from the current frame and the previous N frame's average (note this can be any metric)
-        distance = pkm::Mat::sumOfAbsoluteDifferences(feature_background_average.data, 
+        float distance = pkm::Mat::sumOfAbsoluteDifferences(feature_background_average.data, 
                                                             &current_feature[0], 
                                                             feature_background_average.cols);
         
@@ -287,130 +278,13 @@ bool pkmAudioSegmenter::update()
     
     return bSegmented;
 }
-*/
-
-bool pkmAudioSegmenter::isStartedSegmenting()
-{
-    return bStartedSegment;
-}
-
-bool pkmAudioSegmenter::update() 
-{
-    bStartedSegment = false;
-    if (feature_background_buffer.rows > 0)
-    {
-        // find the average of the past N feature frames
-        feature_background_average = feature_background_buffer.mean();
-        
-        // get the distance from the current frame and the previous N frame's average 
-        // (note this can be any metric)
-        distance = 
-        distanceMetric(feature_background_average.data, 
-                       &current_feature[0], 
-                       feature_background_average.cols);
-        
-        
-        // calculate the mean and deviation for analysis
-        mean_distance = pkm::Mat::mean(background_distance_buffer.data, background_distance_buffer.rows);
-        std_distance = sqrtf(fabs(pkm::Mat::var(background_distance_buffer.data, background_distance_buffer.rows)));		
-        
-        // if we aren't segmenting, add the current distance to the previous M distances buffer
-        if (!bSegmenting) {
-            // add the current distance to the previous M distances buffer
-            background_distance_buffer.insertRowCircularly(&distance);
-            
-        }
-        
-        //printf("distance: %f, mean_distance: %f, std_distance: %f\n", distance, mean_distance, std_distance);
-        
-        // if it is an outlier, then we have detected an event
-        if (!bSegmenting && 
-            (fabs(distance - mean_distance) > SEGMENT_THRESHOLD*std_distance) )
-        {
-            bSegmenting = true;
-            bStartedSegment = true;
-            
-            feature_foreground_buffer = pkm::Mat();
-            feature_foreground_buffer.push_back(current_feature);
-            foreground_distance_buffer.reset(NUM_FORE_BUFFERS_FOR_FEATURE_ANALYSIS, 1);
-        }
-        // we are segmenting, check for conditions to stop segmenting if we are
-        // passed the minimum segment length
-        else if(bSegmenting && 
-                (audioSegment.rows * audioSegment.cols) > MIN_SEGMENT_LENGTH)
-        {
-            // too similar to the original background, no more event
-            if( (fabs(distance - mean_distance) < SEGMENT_THRESHOLD*std_distance) )
-            {
-                bSegmenting = false;
-                bSegmented = true;
-            }
-            // too big a file, stop segmenting
-            else if((audioSegment.rows * audioSegment.cols) >= MAX_SEGMENT_LENGTH)
-            {
-                //resetBackgroundModel();
-                bSegmenting = false;
-                bSegmented = true;
-            }
-            // 
-            else 
-            {
-                // find the average of the past N feature frames
-                feature_foreground_average = feature_foreground_buffer.mean();
-                
-                // get the distance from the current frame and the 
-                // previous N frame's average (note this can be any metric)
-                float fore_distance = distanceMetric(feature_foreground_average.data, 
-                                                     &current_feature[0], 
-                                                     feature_foreground_average.cols);
-                
-                // if we aren't segmenting, add the current distance to the previous M distances buffer
-                foreground_distance_buffer.insertRowCircularly(&distance);
-                
-                // calculate the mean and deviation for analysis
-                float mean_fore_distance = 
-                pkm::Mat::mean(foreground_distance_buffer.data, 
-                               foreground_distance_buffer.rows);
-                float std_fore_distance = 
-                sqrtf(fabs(pkm::Mat::var(foreground_distance_buffer.data, 
-                                         foreground_distance_buffer.rows)));	
-                
-                if (// foreground_distance_buffer.bCircularInsertionFull && 
-                    (fabs(fore_distance - mean_fore_distance) > SEGMENT_THRESHOLD*std_fore_distance) )
-                {
-                    bSegmenting = false;
-                    bSegmented = true;
-                }
-            }
-        }
-    }
-    else {
-        // find the average of the past N feature frames
-        feature_background_average = feature_background_buffer.sum() / (float)NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS;
-        
-        // get the distance from the current frame and the previous N frame's average (note this can be any metric)
-        distance = pkm::Mat::sumOfAbsoluteDifferences(feature_background_average.data, 
-                                                      &current_feature[0], 
-                                                      feature_background_average.cols);
-        
-        // if we aren't segmenting, add the current distance to the previous M distances buffer
-        if (!bSegmenting) {
-            background_distance_buffer.insertRowCircularly(&distance);
-        }
-    }
-    
-    return bSegmented;
-}
-
-
-
 
 // get the last recorded segment (if updateAudio() == true)
-bool pkmAudioSegmenter::getSegmentAndFeatures(float *&buf, int &buf_size, float *&features, int &feature_size)
+void pkmAudioSegmenter::getSegmentAndFeatures(float *&buf, int &buf_size, float *&features, int &feature_size)
 {
     if (!bSegmented) {
         printf("[ERROR]: Should only call this function once and only if update() returns true!");
-        return false;
+        return;
     }
     
     buf_size = audioSegment.rows * audioSegment.cols;
@@ -425,15 +299,14 @@ bool pkmAudioSegmenter::getSegmentAndFeatures(float *&buf, int &buf_size, float 
     //cblas_scopy(feature_size, feature_foreground_buffer.data, 1, features, 1);
     
     bSegmented = false;
-    return true;
 }
 
 // get the last recorded segment (if updateAudio() == true)
-bool pkmAudioSegmenter::getSegmentAndFeatures(std::vector<float> &buf, std::vector<float> &features)
+void pkmAudioSegmenter::getSegmentAndFeatures(vector<float> &buf, vector<float> &features)
 {
     if (!bSegmented) {
         printf("[ERROR]: Should only call this function once and only if update() returns true!");
-        return false;
+        return;
     }
     //printf("segmenting %d samples\n", buf_size);
     int bufSize = audioSegment.rows * audioSegment.cols;
@@ -447,15 +320,14 @@ bool pkmAudioSegmenter::getSegmentAndFeatures(std::vector<float> &buf, std::vect
     cblas_scopy(numLFCCs, feature_foreground_buffer.data, 1, &features[0], 1);
     
     bSegmented = false;
-    return true;
 }
 
 // get the last recorded segment (if updateAudio() == true)
-bool pkmAudioSegmenter::getSegment(float *&buf, int &buf_size)
+void pkmAudioSegmenter::getSegment(float *&buf, int &buf_size)
 {
     if (!bSegmented) {
         printf("[ERROR]: Should only call this function once and only if update() returns true!");
-        return false;
+        return;
     }
     buf_size = audioSegment.rows * audioSegment.cols;
     //printf("segmenting %d samples\n", buf_size);
@@ -464,23 +336,6 @@ bool pkmAudioSegmenter::getSegment(float *&buf, int &buf_size)
     audioSegment = pkm::Mat();
     
     bSegmented = false;
-    
-    return true;
-}
-
-// get the last recorded segment (if updateAudio() == true)
-bool pkmAudioSegmenter::getSegment(pkm::Mat & seg)
-{
-    if (!bSegmented) {
-        printf("[ERROR]: Should only call this function once and only if update() returns true!");
-        return false;
-    }
-    
-    seg = audioSegment;
-    audioSegment = pkm::Mat();
-    
-    bSegmented = false;
-    return true;
 }
 
 pkm::Mat pkmAudioSegmenter::getFeatureSequence()
@@ -494,7 +349,7 @@ pkm::Mat pkmAudioSegmenter::getFeatureSequence()
     
 }
 
-void pkmAudioSegmenter::getCurrentFeatureFrame(std::vector<float> &features)
+void pkmAudioSegmenter::getCurrentFeatureFrame(vector<float> &features)
 {
     audioBackgroundSegment = pkm::Mat();
     
@@ -504,20 +359,6 @@ void pkmAudioSegmenter::getCurrentFeatureFrame(std::vector<float> &features)
     
     feature_background_buffer = current_feature;
 }
-
-
-void pkmAudioSegmenter::getBackgroundSegment(float *&buf, int &segmentSize)
-{
-    //printf("segmenting %d samples\n", buf_size);
-    segmentSize = audioBackgroundSegment.rows * audioBackgroundSegment.cols;
-
-    buf = (float *)malloc(sizeof(float) * segmentSize);
-    cblas_scopy(segmentSize, audioBackgroundSegment.data, 1, buf, 1);
-    audioBackgroundSegment = pkm::Mat();
-    
-    feature_background_buffer = current_feature;
-}
-
 
 void pkmAudioSegmenter::getBackgroundSegmentAndFeatures(float *&buf, int &segmentSize, float *&features, int &featureSize)
 {
@@ -535,7 +376,7 @@ void pkmAudioSegmenter::getBackgroundSegmentAndFeatures(float *&buf, int &segmen
     feature_background_buffer = current_feature;
 }
 
-void pkmAudioSegmenter::getBackgroundSegmentAndFeatures(std::vector<float> &buf, std::vector<float> &features)
+void pkmAudioSegmenter::getBackgroundSegmentAndFeatures(vector<float> &buf, vector<float> &features)
 {
     //printf("segmenting %d samples\n", buf_size);
     int bufSize = audioBackgroundSegment.rows * audioBackgroundSegment.cols;
@@ -554,12 +395,9 @@ void pkmAudioSegmenter::getBackgroundSegmentAndFeatures(std::vector<float> &buf,
 // update the circular buffer detecting segments each update()
 void pkmAudioSegmenter::audioReceived(float *input, int bufferSize, int nChannels)
 {
-    ringBuffer->insertFrame(input);
-    ringBuffer->copyAlignedData(alignedBuffer);
-    //audioFeature->computeMelFeatures(alignedBuffer, current_feature.data, numLFCCs);
-    audioFeature->computeLFCCF(alignedBuffer, current_feature.data, numLFCCs);
-    if (ringBuffer->bRecorded && !current_feature.isNaN()) {
-        
+    audioFeature->computeLFCCF(input, current_feature.data, numLFCCs);
+    
+    if (!current_feature.isNaN()) {
         // store as foreground
         if (bSegmenting) {
             // store the feature
@@ -569,8 +407,8 @@ void pkmAudioSegmenter::audioReceived(float *input, int bufferSize, int nChannel
             else {
                 feature_foreground_buffer.push_back(current_feature);
             }
-            // store the audio (shouldn't store this last frame as the onset of a new sound might be here)
-            if (audioSegment.rows > maxNumFrames) {
+            // store the audio
+            if (audioSegment.rows > NUM_FORE_BUFFERS_FOR_FEATURE_ANALYSIS) {
                 audioSegment.insertRowCircularly(input);
             }
             else {
@@ -579,8 +417,7 @@ void pkmAudioSegmenter::audioReceived(float *input, int bufferSize, int nChannel
             
         }
         // store as background
-        else 
-        {
+        else {
             // store the feature
             if (feature_background_buffer.rows > NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS) {
                 feature_background_buffer.insertRowCircularly(current_feature.data);
@@ -588,18 +425,13 @@ void pkmAudioSegmenter::audioReceived(float *input, int bufferSize, int nChannel
             else {
                 feature_background_buffer.push_back(current_feature);
             }
-            
-            
             // store the audio
-            if (audioBackgroundSegment.rows > maxNumFrames) {
+            if (audioBackgroundSegment.rows > NUM_BACK_BUFFERS_FOR_FEATURE_ANALYSIS) {
                 audioBackgroundSegment.insertRowCircularly(input);
             }
             else {
                 audioBackgroundSegment.push_back(input, bufferSize);
             }
-            
-            // find the average of the past N feature frames
-            feature_background_average = feature_background_buffer.mean();
         }
         /*
         printf("fg size: %d, bg size: %d, fg buffer: %d, bg buffer: %d, bg dist: %d, fg dist: %d\n", 

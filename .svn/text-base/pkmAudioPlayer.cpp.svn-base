@@ -1,7 +1,6 @@
 /*
- *  pkmAudioWindow.cpp
+ *  pkmAudioPlayer.cpp
  *  memoryMosaic
- *
  *
  *  Created by Parag K. Mital - http://pkmital.com 
  *  Contact: parag@pkmital.com
@@ -27,11 +26,5 @@
  
  */
 
-#include "pkmAudioWindow.h"
+#include "pkmAudioPlayer.h"
 
-
-int pkmAudioWindow::rampInLength;
-int pkmAudioWindow::rampOutLength;
-pkm::Mat pkmAudioWindow::rampInBuffer;
-pkm::Mat pkmAudioWindow::rampOutBuffer;
-pkm::Mat pkmAudioWindow::window;

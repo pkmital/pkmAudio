@@ -1,0 +1,69 @@
+/*
+ *  pkmAudioFeatureNormalizer.cpp
+ *  audioVideoMosaic
+ *
+ *  Created by Mr. Magoo on 12/2/11.
+ *  Copyright 2011 __MyCompanyName__. All rights reserved.
+ *
+ */
+
+#include "pkmAudioFeatureNormalizer.h"
+
+pkmAudioFeatureNormalizer::pkmAudioFeatureNormalizer(int featureSize)
+:
+feature_size(featureSize)
+{
+	mean_vec = pkm::Mat(1, feature_size);
+	var_vec = pkm::Mat(1, feature_size);
+	bCalculated = false;
+}
+
+void pkmAudioFeatureNormalizer::addExample(float *descriptor, int descriptor_size)
+{
+	examples.push_back(descriptor, descriptor_size);
+}
+
+void pkmAudioFeatureNormalizer::calculateNormalization()
+{
+	if (examples.rows < 1) {
+		printf("First add examples using addExample(float *descriptor)\n");
+		return;
+	}
+	
+	mean_vec = examples.mean(true);
+	var_vec = examples.var(true);
+	
+	bCalculated = true;
+}
+
+void pkmAudioFeatureNormalizer::normalizeFeature(float *descriptor, int descriptor_size)
+{
+	if (!bCalculated) {
+		printf("First add examples using addExample(float *descriptor) and then calculate normalization using calculateNormalization()\n");
+		return;
+	}
+	pkm::Mat desc(1, descriptor_size, descriptor, false);
+	desc.subtract(mean_vec);
+	desc.divide(var_vec);
+}
+
+void pkmAudioFeatureNormalizer::normalizeDatabase(pkm::Mat &database)
+{
+	pkm::Mat mean_vec = pkm::Mat(1, database.cols); 
+	pkm::Mat var_vec = pkm::Mat(1, database.cols);
+	
+	mean_vec = database.mean(true);
+	var_vec = database.var(true);
+	
+	for (int i = 0; i < database.rows; i++) {
+		pkm::Mat desc(1, database.cols, database.row(i), false);
+		desc.subtract(mean_vec);
+		desc.divide(var_vec);
+	}
+}
+
+void pkmAudioFeatureNormalizer::reset()
+{
+	examples = pkm::Mat();
+	bCalculated = false;
+}

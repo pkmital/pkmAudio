@@ -1,13 +1,13 @@
 /*
- *  pkmAudioWindow.cpp
- *  memoryMosaic
+ *  pkmAudioFileAnalyzer.cpp
+ *  autoGrafittiMapKit
  *
  *
  *  Created by Parag K. Mital - http://pkmital.com 
  *  Contact: parag@pkmital.com
  *
  *  Copyright 2011 Parag K. Mital. All rights reserved.
- * 
+
  
  LICENSE:
  
@@ -27,11 +27,5 @@
  
  */
 
-#include "pkmAudioWindow.h"
+#include "pkmAudioFileAnalyzer.h"
 
-
-int pkmAudioWindow::rampInLength;
-int pkmAudioWindow::rampOutLength;
-pkm::Mat pkmAudioWindow::rampInBuffer;
-pkm::Mat pkmAudioWindow::rampOutBuffer;
-pkm::Mat pkmAudioWindow::window;

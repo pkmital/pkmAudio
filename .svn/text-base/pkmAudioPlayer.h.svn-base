@@ -122,7 +122,7 @@ public:
 		// fade in
 		if (currentFrame == 1) {
 			cblas_scopy(frameSize, audioFile->buffer + audioFile->offset + offset, 1, rampedBuffer, 1);
-			vDSP_vmul(rampedBuffer, 1, pkmAudioWindow::rampInBuffer.data, 1, rampedBuffer, 1, pkmAudioWindow::rampInLength);
+			vDSP_vmul(rampedBuffer, 1, pkmAudioWindow::rampInBuffer, 1, rampedBuffer, 1, pkmAudioWindow::rampInLength);
 			//printf("%d/%d: %f\n", currentFrame, framesToPlay, rampedBuffer[0]);
 			return rampedBuffer;
 		}
@@ -131,7 +131,7 @@ public:
 			//printf("f\n");
 			cblas_scopy(frameSize, audioFile->buffer + audioFile->offset + offset, 1, rampedBuffer, 1);
 			vDSP_vmul(rampedBuffer + frameSize - pkmAudioWindow::rampOutLength, 1, 
-					  pkmAudioWindow::rampOutBuffer.data, 1,
+					  pkmAudioWindow::rampOutBuffer + frameSize - pkmAudioWindow::rampOutLength, 1, 
 					  rampedBuffer + frameSize - pkmAudioWindow::rampOutLength, 1, pkmAudioWindow::rampOutLength);
 			//printf("%d/%d: %f\n", currentFrame, framesToPlay, rampedBuffer[frameSize-1]);
 			return rampedBuffer;			

@@ -1,0 +1,402 @@
+/*
+ *  pkmAudioSegmentDatabase.h
+ *  autoGrafittiMapKit
+ *
+ *  Created by Parag K. Mital - http://pkmital.com 
+ *  Contact: parag@pkmital.com
+ *
+ *  Copyright 2011 Parag K. Mital. All rights reserved.
+ * 
+ 
+ LICENSE:
+ 
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ 
+ 
+ */
+
+#pragma once
+#include <vector>
+using namespace std;
+#include "pkmMatrix.h"
+#include "pkmAudioSegment.h"
+#include "flann.h"
+#include <Accelerate/Accelerate.h>
+#include "ofUtils.h"
+
+class pkmAudioSegmentDatabase
+{
+public:
+	pkmAudioSegmentDatabase()
+	{
+		bBuiltIndex     = false;
+        totalSamples    = 0;
+        k				= 2;												// number of nearest neighbors
+		nnIdx			= (int *)malloc(sizeof(int)*k);						// allocate near neighbor indices
+		dists			= (float *)malloc(sizeof(float)*k);					// allocate near neighbor dists	
+                                                                            //query			= (float *)malloc(sizeof(float)*feature_length);	// pre-allocate a query frame
+		flannParams = DEFAULT_FLANN_PARAMETERS;
+		flannParams.algorithm = FLANN_INDEX_LINEAR;//FLANN_INDEX_KMEANS;// FLANN_INDEX_LINEAR;//FLANN_INDEX_AUTOTUNED;//FLANN_INDEX_LSH;//FLANN_INDEX_AUTOTUNED; // FLANN_INDEX_LSH; // FLANN_INDEX_AUTOTUNED;// FLANN_INDEX_KDTREE; //FLANN_INDEX_AUTOTUNED; //FLANN_INDEX_KDTREE;// FLANN_INDEX_LINEAR; // FLANN_INDEX_AUTOTUNED; // or FLANN_INDEX_KDTREE, FLANN_INDEX_KMEANS
+                                                //        flannParams.target_precision = 0.7; 
+                                                //        flannParams.sample_fraction = 0.25;
+
+        flann_set_distance_type(FLANN_DIST_EUCLIDEAN, 2);
+	}
+	~pkmAudioSegmentDatabase()
+	{
+        if(bBuiltIndex)
+		{
+			flann_free_index(kdTree, &flannParams);
+			bBuiltIndex = false;
+		}
+        
+        vector<pkmAudioSegment *>::iterator it = audioDatabase.begin();
+        while (it != audioDatabase.end()) {
+            delete *it;
+            it = audioDatabase.erase(it);
+        }
+        it = audioDatabaseToDelete.begin();
+        while (it != audioDatabaseToDelete.end()) {
+            delete *it;
+            it = audioDatabaseToDelete.erase(it);
+        }
+		
+		free(nnIdx);
+		free(dists);
+	}
+    
+    void resetDatabase()
+    {
+        vector<pkmAudioSegment *>::iterator it = audioDatabase.begin();
+        while (it != audioDatabase.end()) {
+            audioDatabaseToDelete.push_back(*it);
+            it = audioDatabase.erase(it);
+        }
+		if (bBuiltIndex) {
+			flann_free_index(kdTree, &flannParams);
+		}
+        bBuiltIndex = false;
+    }
+    
+    
+    long long getLength()
+    {
+        return totalSamples;
+    }
+	
+	void setK(int kNeighbors)
+	{
+		k = MAX(1,kNeighbors);
+		k = MIN(20,k);
+	}
+	
+    bool bShouldAddSegment(float *data)
+    {
+        if(!bBuiltIndex)
+            return true;
+        if (flann_find_nearest_neighbors_index_float(kdTree, 
+													 data, 
+													 1, 
+													 nnIdx, 
+													 dists, 
+													 k, 
+													 &flannParams) < 0)
+		{
+            return true;
+        }
+        else if(dists[0] > 0.00025)
+        {
+            return true;
+        }
+        else 
+        {
+            printf("[pkmAudioSegmentDatabase]: Too similar to database, not adding: %f\n", dists[0]);
+            return false;
+        }
+
+    }
+    
+    void addAudioSegment(pkmAudioSegment *segment, float *descriptor, int descriptor_size)
+    {
+        audioDatabase.push_back(segment);
+        totalSamples += (segment->offset - segment->onset);
+        featureDatabase.push_back(descriptor, descriptor_size);
+    }
+    
+	// rebuild the index after segmenting
+	void buildIndex()
+	{		
+        
+		if(bBuiltIndex)
+		{
+			flann_free_index(kdTree, 
+							 &flannParams);
+			bBuiltIndex = false;
+		}
+        
+        //printf("Building FLANN Index...");
+		float speedup;
+		kdTree = flann_build_index(featureDatabase.data, 
+								   featureDatabase.rows, 
+								   featureDatabase.cols, 
+								   &speedup, 
+								   &flannParams);
+        //printf("[OK].\n");
+        //printf("Speed up of %f over linear indexing.\n", speedup);
+
+		bBuiltIndex = true;	
+              
+	}
+	
+	vector<pkmAudioSegment *> getNearestAudioSegments(pkmAudioSegment *segment)
+	{
+		vector<pkmAudioSegment *> nearestAudioSegments;
+		
+		if (!bBuiltIndex) {
+			//printf("[ERROR] First build the index with buildIndex()");
+			return nearestAudioSegments;
+		}
+		
+		if (flann_find_nearest_neighbors_index_float(kdTree, 
+													 segment->descriptor.data, 
+													 1, 
+													 nnIdx, 
+													 dists, 
+													 k, 
+													 &flannParams) < 0)
+		{
+			printf("[ERROR] No frames found for Nearest Neighbor Search!\n");
+			return nearestAudioSegments;
+		}
+        
+		
+		float sumDists = 0;
+		int i = 0;
+		while (i < k) {
+			sumDists += dists[i];
+			i++;
+		}
+		
+		for (int i = 0; i < k; i++) 
+		{
+            if (nnIdx[i] < audioDatabase.size()) {
+                //printf("i-th idx: %d, dist: %f\n", nnIdx[i], dists[i]);
+                pkmAudioSegment *p = (audioDatabase[nnIdx[i]]);
+
+                if (!p->bPlaying) {
+                    p->frame = 0;
+                    p->bPlaying = true;
+                    nearestAudioSegments.push_back(p);
+                }
+            }
+            //else {
+            //    printf("[ERROR] flann reutrned index %d but size of database is %d\n", nnIdx[i], audioDatabase.size());
+            //    return nearestAudioSegments;
+            //}
+            
+		}
+        
+		return nearestAudioSegments;
+	}
+    
+    //vector<pkmAudioSegment> getNearestSequenceMatch(float *descriptor, int num = 1);
+    
+    vector<pkmAudioSegment*> getNearestAudioSegments(float *descriptor)
+	{
+		vector<pkmAudioSegment*> nearestAudioSegments;
+		
+		if (!bBuiltIndex) {
+			//printf("[ERROR] First build the index with buildIndex()");
+			return nearestAudioSegments;
+		}
+		
+		if (flann_find_nearest_neighbors_index_float(kdTree, 
+													 descriptor, 
+													 1, 
+													 nnIdx, 
+													 dists, 
+													 k, 
+													 &flannParams) < 0)
+		{
+			printf("[ERROR] No frames found for Nearest Neighbor Search!\n");
+			return nearestAudioSegments;
+		}
+        
+		
+		float sumDists = 0;
+		int i = 0;
+		while (i < k) {
+			sumDists += dists[i];
+			i++;
+		}
+		
+		for (int i = 0; i < k; i++) 
+		{
+            if (nnIdx[i] < audioDatabase.size()) {
+                //printf("i-th idx: %d, dist: %f\n", nnIdx[i], dists[i]);
+                if (!audioDatabase[nnIdx[i]]->bPlaying) {
+					pkmAudioSegment *p = (audioDatabase[nnIdx[i]]);
+                    p->frame = 0;
+                    p->bPlaying = true;
+                    nearestAudioSegments.push_back(p);
+                }
+            }
+                    //else {
+                    //printf("[ERROR] flann reutrned index %d but size of database is %d\n", nnIdx[i], audioDatabase.size());
+                    //return nearestAudioSegments;
+                    //}
+            
+		}
+        
+		return nearestAudioSegments;
+	}
+    
+    void saveIndex()
+    {
+        
+        if (bBuiltIndex) {
+            char buf[256];
+            sprintf(buf, "%s", ofToDataPath("flann_index.mat").c_str());
+            if(flann_save_index(kdTree, buf))
+                printf("[ERROR] Could not save flann index!\n");
+        }
+         
+    }
+    
+    void loadIndex()
+    {
+        
+        char buf[256];
+        sprintf(buf, "%s", ofToDataPath("flann_index.mat").c_str());
+        kdTree = flann_load_index(buf, 
+                                  featureDatabase.data, 
+                                  featureDatabase.rows, 
+                                  featureDatabase.cols);
+        
+        bBuiltIndex = true;
+         
+    }
+	
+    void save()
+    {
+        featureDatabase.save(ofToDataPath("audio_database.mat"));
+        FILE *fp;
+        fp = fopen(ofToDataPath("parameters.txt").c_str(), "w");
+        //fprintf(fp, "feature_length: %d\n", feature_length);
+        fprintf(fp, "k: %d\n", k);
+        fclose(fp);
+        
+        FILE *fp2;
+        fp2 = fopen(ofToDataPath("audio_database.txt").c_str(), "w");
+        fprintf(fp2, "%ld\n", audioDatabase.size());
+        printf("saving %lu segments\n", audioDatabase.size());
+        for(vector<pkmAudioSegment *>::iterator it = audioDatabase.begin();
+            it != audioDatabase.end();
+            it++)
+        {
+            char buf[512];
+            sprintf(buf, "%s", (*it)->filename.c_str());
+            fprintf(fp2, "%s %ld %ld %ld\n", buf, (*it)->onset, (*it)->offset, (*it)->index);
+            //printf("saved segment %ld - %ld from file %s\n", it->onset, it->offset, buf);
+        }
+        fclose(fp2);
+        
+    }
+    
+    void load()
+    {
+        featureDatabase.load(ofToDataPath("audio_database.mat"));
+        FILE *fp;
+        fp = fopen(ofToDataPath("parameters.txt").c_str(), "r");
+        //fscanf(fp, "feature_length: %d\n", &feature_length);
+        fscanf(fp, "k: %d", &k);
+        fclose(fp);
+        
+        FILE *fp2;
+        fp2 = fopen(ofToDataPath("audio_database.txt").c_str(), "r");
+        unsigned long database_size = 0;
+        fscanf(fp2, "%ld\n", &database_size);
+        printf("loading %d segments\n", database_size);
+        for(unsigned long i = 0; i < database_size; i++)
+        {
+            char buf[512];
+            unsigned long onset, offset, index;
+            vector<float> desc;
+            fscanf(fp2, "%s %ld %ld %ld\n", buf, &onset, &offset, &index);
+            pkmAudioSegment *p = new pkmAudioSegment(buf, onset, offset, desc, index, 0);
+            audioDatabase.push_back(p);
+            //            (*it)->load(&fp2);
+            //printf("loaded segment %ld - %ld from file %s\n", onset, offset, buf);
+        }
+        fclose(fp2);
+        
+        //free(query);
+        //query = (float *)malloc(sizeof(float)*feature_length);	// pre-allocate a query frame
+        
+        
+        databaseMatches = pkm::Mat(1, featureDatabase.rows, true);
+        //databaseMatches = pkm::Mat(featureDatabase.rows+1, featureDatabase.cols, true);
+    }
+	
+    vector<pkmAudioSegment *>           audioDatabaseToDelete;
+	vector<pkmAudioSegment *>           audioDatabase;
+	int                                 feature_length;
+	// For kNN - using C-version of FlANN
+	pkm::Mat							featureDatabase;
+    pkm::Mat                            databaseMatches;
+    
+    long long                           totalSamples;
+    
+	int									*nnIdx;			// near neighbor indices of the featureDatabase
+	float								*dists;			// near neighbor distances from the query to each featureDatabase member
+	flann_index_t						kdTree;			// kd-tree reference representing all the feature-frames
+	struct FLANNParameters				flannParams;	// index parameters are stored here
+	
+	int									k;				// number of nearest neighbors
+	
+	int									numFeatures,	// dimension of each point
+                                        numFrames;		// number of feature point frames
+    
+	bool								bBuiltIndex;
+    
+    
+    void sequenceMatch(
+                       float* V, /* current input sequence */
+                       float* M, /* output convolution */
+                       float* D, /* database sequence */
+                       int w, /* input sequence length */
+                       int n, /* database length */
+                       int a, /* low element selector */
+                       int b, /* high element selector */
+                       int d);
+    
+    inline float cosineDistance(float *x, float *y, unsigned int count) {
+        float dotProd, magX, magY;
+        float *tmp = (float*)malloc(count * sizeof(float));
+        
+        vDSP_dotpr(x, 1, y, 1, &dotProd, count);
+        
+        vDSP_vsq(x, 1, tmp, 1, count);
+        vDSP_sve(tmp, 1, &magX, count);
+        magX = sqrt(magX);
+        
+        vDSP_vsq(y, 1, tmp, 1, count);
+        vDSP_sve(tmp, 1, &magY, count);
+        magY = sqrt(magY);
+        
+        delete tmp;
+        
+        return 1.0 - (dotProd / (magX * magY));
+    }
+};

@@ -15,11 +15,14 @@
 #include "pkmAudioWindow.h"
 
 //#define USE_MAXIMILIAN
+#define USE_NSWINDOW_APP
+
 
 #ifdef USE_MAXIMILIAN
     #include "maximilian.h"
     #include "maxiGrains.h"
 #endif
+
 
 class pkmAudioWaveform
 {
@@ -97,12 +100,12 @@ public:
         ofAddListener(guiOverview->newGUIEvent, this, &pkmAudioWaveform::guiEvent); 
         guiOverview->disableAppEventCallbacks();
         
-        waveformFbo.allocate(width, height, GL_RGBA, 1);
+        waveformFbo.allocate(width, height, GL_RGBA, 8);
         waveformFbo.begin();
         ofDisableAlphaBlending();
-        ofSetColor(0);
+        ofSetColor(255);
         ofBackground(0);
-        ofRect(0,0,width,height);
+        ofDrawRectangle(0, 0, width, height);
         waveformFbo.end();
     }
     
@@ -113,16 +116,14 @@ public:
         height = h;
         x = px;
         y = py;
-        guiOverview->getRect()->setWidth(width - padding*2);
-        guiOverview->getRect()->setHeight(gui_bar_height);
-        guiOverview->getRect()->setPosition(x + padding, y + height + 1);
+        guiOverview->getRect()->set(x + padding, y + height + 1, width - padding*2, gui_bar_height);
         slider->getRect()->setWidth(width - padding*2);
         
         
-        waveformFbo.allocate(width, height, GL_RGBA, 4);
+        waveformFbo.allocate(width, height, GL_RGBA, 1);
         waveformFbo.begin();
         ofSetColor(0,0,0,255);
-        ofRect(0, 0, width, height);
+        ofDrawRectangle(0, 0, width, height);
         waveformFbo.end();
         
         if(bLoaded)
@@ -360,10 +361,10 @@ public:
         float amplitude = (height - gui_bar_height) / 2.0;
         ofFill();
         ofSetColor(50);
-        ofRect(padding, padding, width - padding*2, height + gui_bar_height - padding*2);
+        ofDrawRectangle(padding, padding, width - padding*2, height + gui_bar_height - padding*2);
         ofNoFill();
         ofSetColor(255);
-        ofRect(padding + 1, padding + 1, width - padding*2 - 2, height- 2*padding - 2);
+        ofDrawRectangle(padding + 1, padding + 1, width - padding*2 - 2, height- 2*padding - 2);
         ofSetLineWidth(1.0);
         ofTranslate(padding, height/2);
         
@@ -373,7 +374,7 @@ public:
             float width_step = (float)(width - padding*2) / (float)numBins;
             for (unsigned long i = 0; i < numBins; i++) {
                 float h = binnedSamples[i]*amplitude;
-                ofRect(i*width_step, -h, width_step, h*2);
+                ofDrawRectangle(i*width_step, -h, width_step, h*2);
             }
         }
         
@@ -420,8 +421,8 @@ public:
             double pt = (mouseSample - currentSampleStart) / (double)(currentSampleEnd - currentSampleStart);
             ofSetColor(20, 220, 20);
             float width_step = (float)(width - padding*2);
-            ofRect(pt*width_step + padding, 0, 1, height);
-            ofTriangle(pt*width_step + padding, 0, 
+            ofDrawRectangle(pt*width_step + padding, 0, 1, height);
+            ofDrawTriangle(pt*width_step + padding, 0,
                        pt*width_step + padding, gui_bar_height, 
                        pt*width_step + padding + 10, gui_bar_height/2);
         }
@@ -433,14 +434,14 @@ public:
             double pt = (currentSample - currentSampleStart) / (double)(currentSampleEnd - currentSampleStart);
             ofSetColor(220, 20, 20);
             float width_step = (float)(width - padding*2);
-            ofRect(pt*width_step + padding, 0, 1, height);
+            ofDrawRectangle(pt*width_step + padding, 0, 1, height);
         }
         
         // draw current play marker
         double pt = (currentSample) / (double)(totalSamples);
         ofSetColor(220, 20, 20);
         float width_step = (float)(width - padding*2);
-        ofRect(pt*width_step + padding, height + 1, 1, gui_bar_height);
+        ofDrawRectangle(pt*width_step + padding, height + 1, 1, gui_bar_height);
         
         ofPopMatrix();
         
@@ -518,7 +519,7 @@ public:
             rangeSliderWidth = (slider->getScaledValueHigh() - slider->getScaledValueLow());
             cout << "range: " << rangeSliderWidth << endl;
             
-            slider->setTol(1000.0 / (float)totalSamples);
+            slider->setIncrement(1000.0 / (float)totalSamples);
         }
     }
     
@@ -772,4 +773,52 @@ private:
 };
 
 
+
+
+
+#ifdef USE_NSWINDOW_APP
+#include "ofxNSWindowApp.h"
+
+class pkmAudioWaveformApp : public ofxNSWindowApp
+{
+public:
+    //--------------------------------------------------------------
+    void setup()
+    {
+        frameSize = 1024;
+        pkmAudioWindow::initializeWindow();
+        ofSoundStreamSetup(2, 0, 44100, frameSize, 4);
+        
+        ofSetWindowShape(600, 200);
+    }
+    //--------------------------------------------------------------
+    
+    //--------------------------------------------------------------
+    void allocate(string audioURL)
+    {
+        audioWaveform = new pkmAudioWaveform();
+        audioWaveform->setup(0, 0, ofGetWidth(), ofGetHeight(), frameSize);
+        audioWaveform->loadFile(audioURL);
+    }
+    //--------------------------------------------------------------
+    
+    //--------------------------------------------------------------
+    void update()
+    {
+        audioWaveform->update();
+    }
+    //--------------------------------------------------------------
+    
+    //--------------------------------------------------------------
+    void draw();
+    //--------------------------------------------------------------
+private:
+    pkmAudioWaveform *audioWaveform;
+    int frameSize;
+};
+
 #endif
+
+
+#endif
+

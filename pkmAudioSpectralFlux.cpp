@@ -16,7 +16,7 @@ pkmAudioSpectralFlux::pkmAudioSpectralFlux(int fS, int fftSize, int sampleRate)
 {
     bInit = bSegmenting = false;
     frameSize = fS;
-    fluxHistorySize = sampleRate / fS * 3.0;
+    fluxHistorySize = sampleRate / fS * 0.3;
     fft = new pkmFFT(fftSize);
     magnitudes = pkm::Mat(1, fftSize / 2, true);
     phases = pkm::Mat(1, fftSize / 2, true);
@@ -71,7 +71,8 @@ float pkmAudioSpectralFlux::getFlux(float *magnitudes, int length)
             pkm::Mat mag(1, length, magnitudes, false);
 
             meanSqrFlux.multiply(1 - alpha);
-            pkm::Mat magSqr = pkm::Mat::sqr(mag);
+            pkm::Mat magSqr = mag;
+            magSqr.sqr();
             magSqr.multiply(alpha);
             meanSqrFlux.add(magSqr);
 
@@ -79,9 +80,11 @@ float pkmAudioSpectralFlux::getFlux(float *magnitudes, int length)
             mag.multiply(alpha);
             meanFlux.add(mag);
             
-            pkm::Mat meanSqr = pkm::Mat::sqr(meanFlux);
+            pkm::Mat meanSqr = meanFlux;
+            meanSqr.sqr();
             meanSqrFlux.subtract(meanSqr, stdFlux);
-            stdFlux = pkm::Mat::sqrt(meanSqrFlux);
+            stdFlux = meanSqrFlux;
+            stdFlux.sqrt();
 #endif
             magnitudesMat.subtract(meanFlux);
             magnitudesMat.divide(stdFlux);
@@ -117,7 +120,7 @@ bool pkmAudioSpectralFlux::detectOnset(float *magnitudes, int length)
 {
     currentFlux = getFlux(magnitudes, length);
     
-//    cout << "flux: " << currentFlux << " frames since last onset: " << numFramesSinceLastOnset << endl;
+//    std::cout << "flux: " << currentFlux << " frames since last onset: " << numFramesSinceLastOnset << std::endl;
     
     if (isnan(currentFlux) | isinf(currentFlux)) {
         numFramesSinceLastOnset = 0;
@@ -135,23 +138,6 @@ bool pkmAudioSpectralFlux::detectOnset(float *magnitudes, int length)
     else {
         return false;
     }
-    
-    
-//    if (!bSegmenting && (currentFlux > threshold) && (numFramesSinceLastOnset > minSegmentLength)) {
-//        numFramesSinceLastOnset = 0;
-//        bSegmenting = true;
-//        cout << "segmenting! (flux = " << currentFlux << ") " << " (thresh = " << threshold << ")" << endl;
-//        return true;
-//    }
-//    else if (bSegmenting && (currentFlux < threshold) && (numFramesSinceLastOnset > minSegmentLength)) {
-//        numFramesSinceLastOnset = 0;
-//        bSegmenting = false;
-//        cout << "done segmenting! (flux = " << currentFlux << ") " << " (thresh = " << threshold << ")" << endl;
-//        return true;
-//    }
-//    else {
-//        return false;
-//    }
 }
 
 void pkmAudioSpectralFlux::setOnsetThreshold(float thresh)
