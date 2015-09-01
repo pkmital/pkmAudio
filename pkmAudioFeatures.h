@@ -110,17 +110,21 @@ public:
 	pkmAudioFeatures(int sample_rate = 44100, int fft_size = 2048);
 	~pkmAudioFeatures();
     
-    void computeMelFeatures(float *inputSignal, float *outputFeatures, int numFilters = -1);
+    // 12 features + 12 optional delta
+    void computeMelFeatures(float *inputSignal,
+                            float *outputFeatures,
+                            int numFilters = -1,
+                            bool computeLogAmplitude = true,
+                            bool computeNormalization = false,
+                            bool computeDeltaFeatures = true);
     
-    void computeDeltaMelFeatures(float *inputSignal, float *outputFeatures, int numFilters = -1);
-	
 	void computeLFCCF(float *inputSignal, float *outputFeatures, int numLFCCS=-1);
 	void computeLFCCD(float *inputSignal, double *outputFeatures, int numLFCCS = -1);
 	
 	void computeLFCCFromMagnitudesF(float *fftMagnitudes, float *outputFeatures, int numLFCCS=-1);
 	void computeLFCCFromMagnitudesD(float *fftMagnitudes, double *outputFeatures, int numLFCCS = -1);
 	
-    void computeChromagram(float *fftMagnitudes, float *outputFeatures);
+    void computeChromagram(float *fftMagnitudes, float *outputFeatures, bool calculateDeltaFeatures = false);
     
     // get pointer to calculated magnitude/phase after calculating features
 	float *getMagnitudes();
@@ -140,11 +144,14 @@ public:
 	}
     
 
-    // calculate a 12 + 12 + 12 dimensional audio feature vector composed of Mel + Chromagram
+    // calculate a 12 + 12 dimensional audio feature vector composed of Mel + Chromagram
     void compute24DimAudioFeaturesF(float *inputSignal, float *outputFeatures);
     
     // calculate a 12 + 12 + 12 dimensional audio feature vector composed of Mel + delta Mel + Chromagram
     void compute36DimAudioFeaturesF(float *inputSignal, float *outputFeatures);
+    
+    // calculate a 12 + 12 + 12 + 12 dimensional audio feature vector composed of Mel + delta Mel + Chromagram + delta Chromagram
+    void compute48DimAudioFeaturesF(float *inputSignal, float *outputFeatures);
 	
 	static float cosineDistance(float *x, float *y, unsigned int count);
 	static float L1Norm(float *buf1, float *buf2, int size);
@@ -187,6 +194,9 @@ private:
     
     float           *previousLFCCs;
     float           *previousDeltaLFCCs;
+    
+    float           *previousChromas;
+    float           *previousDeltaChromas;
 
 	float			*foutput;
 	

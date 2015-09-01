@@ -69,6 +69,9 @@ pkmAudioFeatures::~pkmAudioFeatures()
     
     free(previousLFCCs);
     free(previousDeltaLFCCs);
+    
+    free(previousChromas);
+    free(previousDeltaChromas);
 	
 	free(foutput);
     
@@ -132,6 +135,11 @@ void pkmAudioFeatures::setupChromagram()
     float base = 130.81278265;
     note = (float *)malloc(sizeof(float) *12);
     chroma = (float *)malloc(sizeof(float) *12);
+    previousChromas = (float *)malloc(sizeof(float) *12);
+    memset(previousChromas, 0, sizeof(float) * 12);
+    previousDeltaChromas = (float *)malloc(sizeof(float) *12);
+    memset(previousDeltaChromas, 0, sizeof(float) * 12);
+    
     for (int i = 0;i < 12;i++)
     {
         note[i] = base*pow(2,(((float) i)/12));
@@ -229,7 +237,7 @@ void pkmAudioFeatures::createDCT()
 	
 }
 
-void pkmAudioFeatures::computeMelFeatures(float *input, float *output, int numFilters)
+void pkmAudioFeatures::computeMelFeatures(float *input, float *output, int numFilters, bool computeLogAmplitude, bool computeNormalization, bool computeDeltaFeatures)
 {
     // should window input buffer before FFT
 	fft->forward(0, input, fft_magnitudes, fft_phases);
@@ -247,46 +255,42 @@ void pkmAudioFeatures::computeMelFeatures(float *input, float *output, int numFi
         std::cerr << "[ERROR]: pkmAudioFeatures: Incorrect number of filters" << std::endl;
     }
     
-    // Normalize
-    pkm::Mat outputMat(1, numFilters, output, false);
-    outputMat.divideEachVecByMaxVecElement(true);
-}
-
-void pkmAudioFeatures::computeDeltaMelFeatures(float *input, float *output, int numFilters)
-{
-    // should window input buffer before FFT
-	fft->forward(0, input, fft_magnitudes, fft_phases);
-	
-	// sparse matrix product of CQT * FFT
-    
-    if (numFilters == -1) {
-        vDSP_mmul(fft_magnitudes, 1, CQT, 1, output, 1, 1, cqtN, fftOutN);
-    }
-    else if (numFilters <= cqtN)
+    if(computeLogAmplitude)
     {
-        vDSP_mmul(fft_magnitudes, 1, CQT, 1, cqtVector, 1, 1, numFilters, fftOutN);
-        cblas_scopy(numFilters, cqtVector, 1, output, 1);
+        int a = 0;
+        float *ptr1 = 0;
+        
+        // log amplitude
+        a = cqtN;
+        ptr1 = output;
+        while( a-- ){
+            float f = *ptr1;
+            *ptr1++ = f == 0 ? 0 : log10f( f*f );
+        }
     }
-    else {
-        std::cerr << "[ERROR]: pkmAudioFeatures: Incorrect number of filters" << std::endl;
+
+    if(computeNormalization)
+    {
+        // Normalize
+        pkm::Mat outputMat(1, numFilters, output, false);
+        outputMat.divideEachVecByMaxVecElement(true);
     }
     
-    // Normalize
-    pkm::Mat outputMat(1, numFilters, output, false);
-    outputMat.divideEachVecByMaxVecElement(true);
-    
-    // lfcc'
-    vDSP_vsub(output, 1,
-              previousLFCCs, 1,
-              output + numFilters, 1,
-              numFilters);
-    
-    // Normalize
-    pkm::Mat outputMat2(1, numFilters, output + numFilters, false);
-    outputMat.divideEachVecByMaxVecElement(true);
-    
-    // store
-    cblas_scopy(numFilters, output, 1, previousLFCCs, 1);
+    if(computeDeltaFeatures)
+    {
+        // lfcc'
+        vDSP_vsub(output, 1,
+                  previousLFCCs, 1,
+                  output + numFilters, 1,
+                  numFilters);
+        
+        // Normalize
+        pkm::Mat outputMat2(1, numFilters, output + numFilters, false);
+        outputMat2.divideEachVecByMaxVecElement(true);
+        
+        // store
+        cblas_scopy(numFilters, output, 1, previousLFCCs, 1);
+    }
 }
 
 void pkmAudioFeatures::computeLFCCF(float *input, float *output, int numLFCCS)
@@ -332,20 +336,29 @@ void pkmAudioFeatures::computeLFCCF(float *input, float *output, int numLFCCS)
 void pkmAudioFeatures::compute24DimAudioFeaturesF(float *inputSignal, float *outputFeatures)
 {
     // write 12 features for Mel and another 12 for Delta Mel
-	computeMelFeatures(inputSignal, outputFeatures, 12);
+	computeMelFeatures(inputSignal, outputFeatures, 12,  true, false, false);
     
     // write last 12 for Chromagram
-    computeChromagram(getMagnitudes(), outputFeatures + 12);
+    computeChromagram(getMagnitudes(), outputFeatures + 12, false);
 }
 
 
 void pkmAudioFeatures::compute36DimAudioFeaturesF(float *inputSignal, float *outputFeatures)
 {
     // write 12 features for Mel and another 12 for Delta Mel
-	computeDeltaMelFeatures(inputSignal, outputFeatures, 12);
+    computeMelFeatures(inputSignal, outputFeatures, 12, true, false, true);
     
     // write last 12 for Chromagram
-    computeChromagram(getMagnitudes(), outputFeatures + 24);
+    computeChromagram(getMagnitudes(), outputFeatures + 24, false);
+}
+
+void pkmAudioFeatures::compute48DimAudioFeaturesF(float *inputSignal, float *outputFeatures)
+{
+    // write 12 features for Mel and another 12 for Delta Mel
+    computeMelFeatures(inputSignal, outputFeatures, 12, true, false, true);
+    
+    // write last 12 for Chromagram and 12 for delta Chromagram
+    computeChromagram(getMagnitudes(), outputFeatures + 24, true);
 }
 
 void pkmAudioFeatures::computeLFCCFromMagnitudesF(float *fft_magnitudes, float *outputFeatures, int numLFCCS)
@@ -471,7 +484,7 @@ void pkmAudioFeatures::computeLFCCFromMagnitudesD(float *fft_magnitudes, double*
 	
 }
 
-void pkmAudioFeatures::computeChromagram(float *fftMagnitudes, float *outputFeatures)
+void pkmAudioFeatures::computeChromagram(float *fftMagnitudes, float *outputFeatures, bool calculateDeltaFeatures)
 {
     int octaves = 2;
     int harmonics = 2;
@@ -514,6 +527,22 @@ void pkmAudioFeatures::computeChromagram(float *fftMagnitudes, float *outputFeat
     
     pkm::Mat outputMat(1, 12, outputFeatures, false);
     outputMat.divideEachVecByMaxVecElement(true);
+    
+    if(calculateDeltaFeatures)
+    {
+        // chromas'
+        vDSP_vsub(outputFeatures, 1,
+                  previousChromas, 1,
+                  outputFeatures + 12, 1,
+                  12);
+        
+        // Normalize
+        pkm::Mat outputMat2(1, 12, outputFeatures + 12, false);
+        outputMat.divideEachVecByMaxVecElement(true);
+        
+        // store
+        cblas_scopy(12, outputFeatures, 1, previousChromas, 1);
+    }
 }
 
 
