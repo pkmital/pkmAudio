@@ -70,11 +70,20 @@ void pkmAudioFeatureNormalizer::normalizeFeature(float *descriptor, int descript
 
 void pkmAudioFeatureNormalizer::normalizeDatabase(pkm::Mat &database)
 {
-	pkm::Mat mean_vec = pkm::Mat(1, database.cols); 
-	pkm::Mat var_vec = pkm::Mat(1, database.cols);
-	
-	mean_vec = database.mean(true);
-	var_vec = database.var(true);
+    static pkm::Mat mean_vec, var_vec, prev_mean_vec, prev_var_vec;
+    
+    mean_vec = database.mean(true);
+    var_vec = database.var(true);
+    
+    if(prev_mean_vec.size())
+    {
+        mean_vec = mean_vec + prev_mean_vec;
+        var_vec = var_vec + prev_var_vec;
+    }
+    else {
+        prev_mean_vec = mean_vec;
+        prev_var_vec = var_vec;
+    }
 	
     printf("Database mean: \n");
     mean_vec.print();

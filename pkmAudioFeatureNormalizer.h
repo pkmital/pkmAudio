@@ -27,7 +27,7 @@ public:
 	int feature_size;
 	pkm::Mat examples;
 	pkm::Mat mean_vec, 
-			var_vec;
+			var_vec, prev_mean_vec, prev_var_vec;
     
     int max_examples;
 };

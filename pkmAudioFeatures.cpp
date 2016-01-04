@@ -90,7 +90,7 @@ void pkmAudioFeatures::setupCepstral()
 	
 	// low C minus quater tone
 	loEdge = 55.0 * pow(2.0, 2.5/12.0);		//55.0
-	hiEdge = 15000;						//8000.0
+	hiEdge = 8000;						//8000.0
 	
 	// Constant-Q bandwidth
 	fratio = pow(2.0, 1.0/(float)bpoN);				
@@ -560,7 +560,7 @@ float pkmAudioFeatures::cosineDistance(float *x, float *y, unsigned int count) {
 	vDSP_sve(tmp, 1, &magY, count);
 	magY = sqrt(magY);
 	
-	delete tmp;
+	free(tmp);
 	
 	return 1.0 - (dotProd / (magX * magY));
 }

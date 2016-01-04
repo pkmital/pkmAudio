@@ -28,13 +28,13 @@ pkmAudioSpectralFlux::pkmAudioSpectralFlux(int fS, int fftSize, int sampleRate)
     
     numFramesSinceLastOnset = 0;
     minSegmentLength = sampleRate / fS * 0.05;
-    threshold = 0.25;
+    threshold = 2.5;
     currentFlux = 0;
     
 //    fluxWaveform = pkm::Mat(fS, 1, true);
     
     
-    alpha = 0.01;
+    alpha = 0.05;
     
 }
 

@@ -26,6 +26,12 @@
 #include <string>
 #include "pkmMatrix.h"
 
+//#define DO_TIMESTRETCH
+
+#ifdef DO_TIMESTRETCH
+#include "pkmTimeStretcher.h"
+#endif
+
 using namespace std;
 
 class pkmAudioSegment
@@ -33,181 +39,121 @@ class pkmAudioSegment
 public:
     
     pkmAudioSegment() 
-    : onset(0), offset(0), index(0), frame(0), video_frame(0), bPlaying(false), bNeedsReset(false)
+    : onset(0), offset(0), index(0), frame(0), bPlaying(false), bNeedsReset(false)
     {
         bStoringAudioData = false;
+        bStoringDescriptor = false;
     }
     
-    pkmAudioSegment(float *buf, unsigned long on, unsigned long off,
-                    unsigned long vI = 0, unsigned long fr = 0, bool playing = false) 
-    :   onset(on), offset(off), index(vI), frame(fr), video_frame(0), bPlaying(playing), bNeedsReset(false)
+    pkmAudioSegment(shared_ptr<pkm::Mat> buf,
+                    unsigned long onset,
+                    unsigned long offset,
+                    unsigned long index,
+                    unsigned long frame = 0,
+                    bool playing = false,
+                    bool needs_reset = false)
+    :   buffer(buf), onset(onset), offset(offset), index(index), frame(frame), bPlaying(playing), bNeedsReset(needs_reset)
     {
-        buffer = (float *)malloc(sizeof(float) * off);
-        cblas_scopy(off, buf, 1, buffer, 1);
+        audio_rate = 1.0;
         bStoringAudioData = true;
+        bStoringDescriptor = false;
+#ifdef DO_TIMESTRETCH
+        ts.setup(buf);
+#endif
     }
     
-    pkmAudioSegment(string f, unsigned long on, unsigned long off,
-                    unsigned long vI = 0, unsigned long fr = 0, bool playing = false) 
-    :   filename(f), onset(on), offset(off), index(vI), frame(fr), video_frame(0), bPlaying(playing), bNeedsReset(false)
+    pkmAudioSegment(string filename,
+                    unsigned long onset,
+                    unsigned long offset,
+                    shared_ptr<pkm::Mat> descriptor,
+                    unsigned long index,
+                    unsigned long frame,
+                    bool playing = false,
+                    bool needs_reset = false)
+    :   filename(filename), onset(onset), offset(offset), descriptor(descriptor), index(index), frame(frame), bPlaying(playing), bNeedsReset(needs_reset)
     {
+        audio_rate = 1.0;
         bStoringAudioData = false;
+        bStoringDescriptor = true;
     }
     
-    pkmAudioSegment(string f, unsigned long on, unsigned long off, vector<float> desc, 
-                    unsigned long vI = 0, unsigned long fr = 0, bool playing = false) 
-    :   filename(f), onset(on), offset(off), descriptor(desc), index(vI), frame(fr), bPlaying(playing), video_frame(0), bNeedsReset(false)
+    #ifdef DO_TIMESTRETCH
+    float ts_play(float speed, float rate, float grainLength, int overlaps, float posmod = 0.0)
     {
-        bStoringAudioData = false;
+        index = ts.getPosition();
+        float sample = ts.play(rate, speed, grainLength, overlaps, posmod);
+        audio_rate = speed;
+        return sample;
     }
     
-    pkmAudioSegment(string f, unsigned long on, unsigned long off, pkm::Mat desc, unsigned long vI = 0, unsigned long fr = 0, bool playing = false) 
-    :   filename(f), onset(on), offset(off), descriptor(desc), index(vI), frame(fr), bPlaying(playing), video_frame(0), bNeedsReset(false)
+    void resetPosition()
     {
-        bStoringAudioData = false;
-    }
-    
-    pkmAudioSegment(string f, unsigned long on, unsigned long off, float *desc, unsigned long desc_length, unsigned long vI = 0, unsigned long fr = 0, bool playing = false) 
-    :   filename(f), onset(on), offset(off), index(vI), frame(fr), bPlaying(playing), video_frame(0), bNeedsReset(false)
-    {
-        descriptor = pkm::Mat(1, desc_length, desc, true);
-        bStoringAudioData = false;
-    }
-    
-    pkmAudioSegment(const pkmAudioSegment &rhs)
-    {
-        filename = rhs.filename;
-        onset = rhs.onset;
-        offset = rhs.offset;
-        index = rhs.index;
-        frame = rhs.frame;
-        descriptor = rhs.descriptor;
-        bPlaying = rhs.bPlaying;
-		audio_frame = rhs.audio_frame;
-		video_frame = rhs.video_frame;
-		audio_file_name = rhs.audio_file_name;
-		video_file_name = rhs.video_file_name;
-		audio_rate = rhs.audio_rate;
-        video_rate = rhs.video_rate;
-        current_video_frame = rhs.current_video_frame;
-        
-        bStoringAudioData = rhs.bStoringAudioData;
-        bNeedsReset = rhs.bNeedsReset;
-        bPlaying = rhs.bPlaying;
-    }
-    pkmAudioSegment & operator=(const pkmAudioSegment &rhs)
-    {
-        if (descriptor.data == rhs.descriptor.data) {
-            return *this;
+        if(audio_rate > 0)
+        {
+            ts.setPosition(0);
         }
-        filename = rhs.filename;
-        onset = rhs.onset;
-        offset = rhs.offset;
-        index = rhs.index;
-        frame = rhs.frame;
-        descriptor = rhs.descriptor;
-        bPlaying = rhs.bPlaying;
-		audio_frame = rhs.audio_frame;
-        video_frame = rhs.video_frame;
-		audio_file_name = rhs.audio_file_name;
-		video_file_name = rhs.video_file_name;
-		audio_rate = rhs.audio_rate;
-        video_rate = rhs.video_rate;
-        current_video_frame = rhs.current_video_frame;
-        
-        bStoringAudioData = rhs.bStoringAudioData;
-        bNeedsReset = rhs.bNeedsReset;
-        bPlaying = rhs.bPlaying;
-        return *this;
+        else
+        {
+            ts.setPosition(1.0);
+        }
     }
     
-    void save(FILE **fp, bool save_feature = false)
+    bool finished()
+    {
+        if(audio_rate < 0)
+            return index == 0;
+        else
+            return index == (offset-onset-1);
+    }
+    
+    bool started()
+    {
+        if(audio_rate > 0)
+            return index == 0;
+        else
+            return index == (offset-onset-1);
+    }
+    #endif
+    
+    void save(FILE **fp)
     {
         if (*fp) {
             fprintf(*fp, "%s %lu %lu %ld\n", filename.c_str(), onset, offset, index);
-            if (save_feature) {
-                
-            }
         }
     }
     
-    void load(FILE **fp, bool read_feature = false)
+    void load(FILE **fp)
     {
         if (*fp) {
             char buf[512];
             fscanf(*fp, "%s %ld %ld %ld\n", buf, &onset, &offset, &index);
             filename = string(buf);
-            if (read_feature) {
-                
-            }
         }
     }
-	
-	pkmAudioSegment(string af_name, string vf_name, unsigned long af, unsigned long vf, unsigned long numaf, unsigned long numvf, float ar, float vr, int audio_frame_size)
-	: 
-	audio_file_name(af_name), video_file_name(vf_name), 
-	audio_frame(af), video_frame(vf), 
-	num_audio_frames(numaf), num_video_frames(numvf), 
-	audio_rate(ar), video_rate(vr),
-	bPlaying(false)
-	{
-		onset = audio_frame * audio_frame_size;
-		frame = 0;
-		current_video_frame = 0;
-		offset = (audio_frame + num_audio_frames) * audio_frame_size;
-		index = 0;
-        bStoringAudioData = false;
-	}
 	
     ~pkmAudioSegment()
     {
-        if(bStoringAudioData)
-        {
-            //cout << "deleting ..." << endl;
-            free(buffer);
-        }
         bStoringAudioData = false;
     }
     
-	void setDescriptor(float *desc, int desc_length)
-	{
-		descriptor = pkm::Mat(1, desc_length, desc, true);
-	}
-    
-	void setDescriptor(pkm::Mat desc)
-	{
-		descriptor = desc;
-	}
-	
-	void updateVideoFrame()
-	{
-		current_video_frame = frame * video_rate / audio_rate;
-	}
-	
     string filename;
 	
     unsigned long onset, offset;
     unsigned long index;
     unsigned long frame;				// current audio frame
-	
-    unsigned long current_video_frame;
-	
-	unsigned long video_frame;
-	unsigned long audio_frame;
-	
-	string audio_file_name;
-	string video_file_name;
-	
-	unsigned long num_audio_frames;
-	unsigned long num_video_frames;
-	
+		
 	double audio_rate;
-	double video_rate;
-    double audio_position;
     
     bool bNeedsReset;               // triggered to reset to frame 0
 	bool bPlaying;                  // already playing, so frame > 0
     bool bStoringAudioData;         // store the audio buffer *
-    float *buffer;
-    pkm::Mat descriptor;
+    bool bStoringDescriptor;
+
+    shared_ptr<pkm::Mat> buffer;
+    shared_ptr<pkm::Mat> descriptor;
+    
+    #ifdef DO_TIMESTRETCH
+    pkmPitchStretch<hannWinFunctor> ts;
+    pkm::Mat stretched_buffer;
+    #endif
 };

@@ -46,8 +46,6 @@ public:
 	
 	static void initializeWindow(int ramp_length = 128)
 	{
-		int ratio = 1;
-        
 		rampInLength = ramp_length;
 		rampOutLength = ramp_length;
         
@@ -63,23 +61,8 @@ public:
         int window_offset = ramp_length - rampOutLength;
 		cblas_scopy(rampOutLength, window.data + window_offset, 1, rampOutBuffer.data, 1);
 		
-//		for (int i = frameSize/ratio; i < frameSize; i++) {
-//			rampInBuffer[i] = 1.0f;
-//		}
-//		
-//		for (int i = 0; i < frameSize*(ratio-1)/ratio; i++) {
-//			rampOutBuffer[i] = 1.0f;
-//		}
-
-//        for(int i = 0; i < rampInLength; i++)
-//        {
-//            std::cout << rampInBuffer[i] << ", " << rampOutBuffer[i] << std::endl;
-//        }
-		
-		
 		rampInBuffer[0] = 0.0f;
 		rampOutBuffer[rampOutLength-1] = 0.0f;
-		
 	}
 	
 	
